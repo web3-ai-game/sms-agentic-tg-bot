@@ -1,11 +1,11 @@
 /**
- * 語音處理器 v3.0 - 雙 Bot 回覆版
+ * 语音处理器 v3.0 - 双 Bot 回复版
  * 
  * 功能:
- * - 精確轉換語音為文字
- * - BongBong 專業回覆
- * - Avatar 搞笑回覆
- * - 雙 Bot 互動
+ * - 精确转换语音为文字
+ * - BongBong 专业回复
+ * - Avatar 搞笑回复
+ * - 双 Bot 互动
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -26,32 +26,32 @@ const genAI = new GoogleGenerativeAI(config.apiKeys.gemini);
 export async function handleVoiceMessage(bot, msg) {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
-  const userName = msg.from.first_name || '用戶';
+  const userName = msg.from.first_name || '用户';
 
   try {
-    // 發送處理中狀態
+    // 发送处理中状态
     await bot.sendChatAction(chatId, 'typing');
 
-    // 1. 獲取語音文件
+    // 1. 获取语音文件
     const fileId = msg.voice.file_id;
     const file = await bot.getFile(fileId);
     const fileUrl = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
 
-    // 2. 下載音頻數據
+    // 2. 下载音频数据
     const audioResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
     const audioData = Buffer.from(audioResponse.data).toString('base64');
 
-    // 3. 使用 Gemini 轉錄語音
+    // 3. 使用 Gemini 转录语音
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
-    const transcriptionPrompt = `請精確轉錄這段語音的內容。
+    const transcriptionPrompt = `请精确转录这段语音的内容。
 要求：
-1. 完全按照說話者的原話轉錄
-2. 保留語氣詞（嗯、啊、哦等）
-3. 如果聽不清楚，用 [聽不清] 標記
-4. 只輸出轉錄文字，不要加任何說明
+1. 完全按照说话者的原话转录
+2. 保留语气词（嗯、啊、哦等）
+3. 如果听不清楚，用 [听不清] 标记
+4. 只输出转录文字，不要加任何说明
 
-請開始轉錄：`;
+请开始转录：`;
 
     const transcriptionResult = await model.generateContent([
       { text: transcriptionPrompt },
@@ -60,13 +60,13 @@ export async function handleVoiceMessage(bot, msg) {
 
     const transcribedText = transcriptionResult.response.text().trim();
 
-    // 4. 發送轉錄結果
+    // 4. 发送转录结果
     const transcriptMsg = await bot.sendMessage(chatId, 
-      `🎤 *語音轉文字：*\n「${transcribedText}」`,
+      `🎤 *语音转文字：*\n「${transcribedText}」`,
       { parse_mode: 'Markdown' }
     );
 
-    // 5. BongBong 專業回覆
+    // 5. BongBong 专业回复
     const bongbongResponse = await bongbongService.generateResponse(transcribedText, {
       userId,
       chatId,
@@ -74,7 +74,7 @@ export async function handleVoiceMessage(bot, msg) {
       history: []
     });
 
-    const bongbongMsg = `🤖 *BongBong (專業版)*
+    const bongbongMsg = `🤖 *BongBong (专业版)*
 
 ${bongbongResponse.response}
 
@@ -85,7 +85,7 @@ ${bongbongResponse.dashboard}`;
       reply_to_message_id: transcriptMsg.message_id
     });
 
-    // 6. Avatar 搞笑回覆 (延遲2秒)
+    // 6. Avatar 搞笑回复 (延迟2秒)
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const avatarResponse = await generateAvatarVoiceResponse(transcribedText, userName);
@@ -98,26 +98,26 @@ ${bongbongResponse.dashboard}`;
       }
     );
 
-    // 7. 記錄到記憶
+    // 7. 记录到记忆
     await memoryService.logConversation({
       chatId,
       userId,
       userName,
-      message: `[語音] ${transcribedText}`,
+      message: `[语音] ${transcribedText}`,
       response: `BongBong: ${bongbongResponse.response}\nAvatar: ${avatarResponse}`,
       model: bongbongResponse.modelId,
       tokens: bongbongResponse.tokens?.input + bongbongResponse.tokens?.output || 0,
       memoryRefs: bongbongResponse.memoryRefs
     });
 
-    // 8. 記錄到群記憶
+    // 8. 记录到群记忆
     const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
     if (isGroup) {
       await groupMemoryService.logGroupMessage({
         groupId: chatId.toString(),
         userId,
         userName,
-        content: `[語音] ${transcribedText}`,
+        content: `[语音] ${transcribedText}`,
         isBot: false
       });
     }
@@ -128,14 +128,14 @@ ${bongbongResponse.dashboard}`;
     logger.error('Voice handler error:', error);
     
     await bot.sendMessage(chatId, 
-      `❌ 抱歉，處理語音時出現問題。\n\n錯誤: ${error.message}\n\n請嘗試重新發送，或者直接打字告訴我。`,
+      `❌ 抱歉，处理语音时出现问题。\n\n错误: ${error.message}\n\n请尝试重新发送，或者直接打字告诉我。`,
       { parse_mode: 'Markdown' }
     );
   }
 }
 
 /**
- * 生成 Avatar 搞笑回覆
+ * 生成 Avatar 搞笑回复
  */
 async function generateAvatarVoiceResponse(transcribedText, userName) {
   try {
