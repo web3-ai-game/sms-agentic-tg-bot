@@ -31,6 +31,7 @@ import notionSyncService from './notionSyncService.js';
 import creativeService from './creativeService.js';
 import idleAnalysisService from './idleAnalysisService.js';
 import newsCompareService from './newsCompareService.js';
+import vectorEnhanceService from './vectorEnhanceService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -93,6 +94,7 @@ class DualBotService {
       await creativeService.init();  // 创作服务
       await idleAnalysisService.init();  // 闲置分析服务
       await newsCompareService.init();  // 新闻对比服务
+      await vectorEnhanceService.init();  // 向量增强服务
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -196,6 +198,9 @@ class DualBotService {
         // 記錄群組活動 (閒置分析用)
         idleAnalysisService.recordActivity(chatId);
         
+        // 記錄到向量增強服務 (每 50 句總結)
+        vectorEnhanceService.recordMessage(chatId, userId, userName, text);
+        
         // 同步到 Notion (用户消息全量复制)
         notionSyncService.addMessage({
           isBot: false,
@@ -232,8 +237,22 @@ class DualBotService {
         history
       });
 
+      // 向量增強回覆 (50% 機率引用向量庫)
+      let finalResponse = result.response;
+      if (isGroup) {
+        const enhanced = await vectorEnhanceService.enhanceResponse(
+          chatId, 
+          text, 
+          result.response
+        );
+        if (enhanced.enhanced) {
+          finalResponse = enhanced.response;
+          logger.debug(`VectorEnhance: Response enhanced with ${enhanced.referenceCount} references`);
+        }
+      }
+
       // 構建回覆 (精簡儀表盤)
-      const responseText = `${result.response}${result.dashboard}`;
+      const responseText = `${finalResponse}${result.dashboard}`;
 
       // 發送回覆 (帶精簡菜單按鈕)
       const sentMessage = await this.bongbongBot.sendMessage(chatId, responseText, {
@@ -255,7 +274,7 @@ class DualBotService {
           groupId: chatId.toString(),
           userId: 'bongbong',
           userName: 'BongBong',
-          content: result.response,
+          content: finalResponse,
           isBot: true,
           botName: 'qitiandashengqianqian_bot'
         });
@@ -265,16 +284,16 @@ class DualBotService {
           isBot: true,
           userId: 'bongbong',
           userName: 'BongBong',
-          content: result.response,
+          content: finalResponse,
           action: 'chat'
         }).catch(err => logger.debug('Notion sync error:', err.message));
 
-        // 通知 Avatar 接話
-        if (this.avatarBot) {
-          setTimeout(() => {
-            avatarService.respondToBongBong(chatId, result.response, sentMessage.message_id);
-          }, AVATAR_PERSONA.triggers.afterBongBongDelay);
-        }
+        // 取消 Avatar 自動接話（碎碎念效果不好）
+        // if (this.avatarBot) {
+        //   setTimeout(() => {
+        //     avatarService.respondToBongBong(chatId, result.response, sentMessage.message_id);
+        //   }, AVATAR_PERSONA.triggers.afterBongBongDelay);
+        // }
       }
 
       // 更新歷史

@@ -1,12 +1,11 @@
 /**
- * 數字分身 (Avatar) 服務 v2.0
+ * Admin Bot (高級知識分子) 服務 v3.0
  * 
  * 功能:
- * - 無厘頭扯淡接地氣拋梗怪物
- * - 拆解周文的高密度語意
+ * - 多模態處理：圖片生成、音頻回覆、視頻生成
  * - 真實之眼 (多模型交叉驗證)
- * - 30-60分鐘隨機10句高頻對話
- * - 接 BongBong 的話茬
+ * - 拆解周文的高密度語意
+ * - 不再自動接話（取消碎碎念）
  */
 
 import TelegramBot from 'node-telegram-bot-api';
@@ -120,14 +119,14 @@ class AvatarService {
       // 重置空閒計時器
       this.resetIdleTimer(chatId);
 
-      // 如果是 BongBong 說話，接話
-      if (isBot && botUsername === 'qitiandashengqianqian_bot') {
-        logger.info(`Avatar detected BongBong message, will respond...`);
-        setTimeout(() => {
-          this.respondToBongBong(chatId, msg.text, msg.message_id);
-        }, AVATAR_PERSONA.triggers.afterBongBongDelay);
-        return;
-      }
+      // 取消自動接 BongBong 的話（碎碎念效果不好）
+      // if (isBot && botUsername === 'qitiandashengqianqian_bot') {
+      //   logger.info(`Avatar detected BongBong message, will respond...`);
+      //   setTimeout(() => {
+      //     this.respondToBongBong(chatId, msg.text, msg.message_id);
+      //   }, AVATAR_PERSONA.triggers.afterBongBongDelay);
+      //   return;
+      // }
 
       // 如果是真人說話（不是自己），處理
       if (!isBot && botUsername !== 'svs_notion_bot') {
@@ -174,22 +173,17 @@ class AvatarService {
           return;
         }
 
-        // ===== 母親的消息 - 每條都回覆 =====
-        if (isMother) {
-          logger.info('Avatar responding to Mother (always)');
-          setTimeout(() => {
-            this.respondToHuman(chatId, msg.text, msg.message_id, userName);
-          }, 2000 + Math.random() * 2000);
-          return;
-        }
-
-        // ===== 其他人 - 低概率回覆 =====
-        if (Math.random() < 0.3) {
-          logger.info(`Avatar will respond to ${userName}'s message (30%)`);
-          setTimeout(() => {
-            this.respondToHuman(chatId, msg.text, msg.message_id, userName);
-          }, 3000 + Math.random() * 3000);
-        }
+        // ===== 取消自動回覆母親（碎碎念效果不好）=====
+        // Admin Bot 現在專注多模態處理，不再自動文字回覆
+        // 只在被 @mention 或使用菜單時回應
+        
+        // ===== 取消其他人低概率回覆 =====
+        // if (Math.random() < 0.3) {
+        //   logger.info(`Avatar will respond to ${userName}'s message (30%)`);
+        //   setTimeout(() => {
+        //     this.respondToHuman(chatId, msg.text, msg.message_id, userName);
+        //   }, 3000 + Math.random() * 3000);
+        // }
       }
     });
 
