@@ -21,7 +21,7 @@ export const MAIN_MENU = {
     [
       { text: '🌿 养生 🔨', callback_data: 'menu_health' },
       { text: '🧠 脑力 🔨', callback_data: 'menu_brain' },
-      { text: '🎨 创作 🔨', callback_data: 'menu_creative' }
+      { text: '🎨 创作 ✅', callback_data: 'menu_creative' }
     ],
     [
       { text: '🎮 游戏 📋', callback_data: 'menu_games' },

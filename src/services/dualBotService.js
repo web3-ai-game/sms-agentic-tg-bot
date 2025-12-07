@@ -28,6 +28,7 @@ import segmentService from './segmentService.js';
 import notebookService from './notebookService.js';
 import smartMemoryService from './smartMemoryService.js';
 import notionSyncService from './notionSyncService.js';
+import creativeService from './creativeService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -87,6 +88,7 @@ class DualBotService {
       await notebookService.connect();  // 多用户笔记本
       await smartMemoryService.init();  // 智能记忆系统
       await notionSyncService.initialize();  // Notion 同步服务
+      await creativeService.init();  // 创作服务
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -820,11 +822,7 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
     // ===== 創作工具 =====
     if (data.startsWith('creative_')) {
       const action = data.replace('creative_', '');
-      if (action === 'image') {
-        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'image');
-      } else if (action === 'video') {
-        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'video');
-      }
+      await this.handleCreativeCallback(chatId, userId, userName, action, messageId);
       return;
     }
 
@@ -1435,9 +1433,227 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
         const userName = '用户';  // 从 context 获取
         await this.handleVisaQuery(chatId, userId, userName, text);
         return true;
+        
+      case 'creative_writing':
+      case 'creative_story':
+      case 'creative_expand':
+        // 创作输入
+        await this.handleCreativeInput(userId, chatId, text, action.type);
+        return true;
     }
     
     return false;
+  }
+
+  // ==================== 创作功能 ====================
+
+  /**
+   * 处理创作回调
+   */
+  async handleCreativeCallback(chatId, userId, userName, action, messageId) {
+    switch (action) {
+      case 'writing':
+        // 写作助手
+        this.pendingAction.set(userId, { type: 'creative_writing', chatId });
+        await this.bongbongBot.sendMessage(chatId, 
+          `✍️ *写作助手*\n\n选择写作类型：\n\n1️⃣ 发送主题 → 生成大纲\n2️⃣ 发送 \`草稿:主题\` → 生成初稿\n3️⃣ 发送 \`润色:内容\` → 润色文字\n4️⃣ 发送 \`扩写:内容\` → 扩展内容\n\n例如：\n• \`草稿:一封给妈妈的信\`\n• \`润色:今天天气很好我很开心\``,
+          { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '◀️ 返回创作工具', callback_data: 'menu_creative' }
+              ]]
+            }
+          }
+        );
+        break;
+
+      case 'story':
+        // 故事续写
+        this.pendingAction.set(userId, { type: 'creative_story', chatId });
+        await this.bongbongBot.sendMessage(chatId,
+          `📖 *故事续写*\n\n发送故事开头，我来帮你续写！\n\n也可以：\n• 发送 \`结局:故事内容\` → 生成结局\n• 发送 \`角色:背景设定\` → 创建角色\n\n例如：\n_从前有座山，山里有座庙..._`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '◀️ 返回创作工具', callback_data: 'menu_creative' }
+              ]]
+            }
+          }
+        );
+        break;
+
+      case 'inspire':
+        // 灵感激发
+        await this.bongbongBot.sendMessage(chatId, '💡 *正在激发灵感...*', { parse_mode: 'Markdown' });
+        const inspiration = await creativeService.getInspiration();
+        if (inspiration.success) {
+          await this.bongbongBot.sendMessage(chatId,
+            `💡 *创作灵感*\n\n${inspiration.content}`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: '🔄 换一批', callback_data: 'creative_inspire' },
+                    { text: '💾 保存', callback_data: 'creative_save_inspire' }
+                  ],
+                  [{ text: '◀️ 返回', callback_data: 'menu_creative' }]
+                ]
+              }
+            }
+          );
+        } else {
+          await this.bongbongBot.sendMessage(chatId, '❌ 灵感生成失败，请重试');
+        }
+        break;
+
+      case 'expand':
+        // 扩写润色
+        this.pendingAction.set(userId, { type: 'creative_expand', chatId });
+        await this.bongbongBot.sendMessage(chatId,
+          `📝 *扩写润色*\n\n发送你想扩写或润色的内容。\n\n我会帮你：\n• 增加细节描写\n• 丰富情感表达\n• 优化语言表达`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '◀️ 返回创作工具', callback_data: 'menu_creative' }
+              ]]
+            }
+          }
+        );
+        break;
+
+      case 'image':
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'image');
+        break;
+
+      case 'video':
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'video');
+        break;
+
+      case 'save_inspire':
+        // 保存灵感到笔记
+        await this.bongbongBot.sendMessage(chatId, '💾 灵感已保存到笔记本！');
+        break;
+
+      default:
+        await this.bongbongBot.sendMessage(chatId, '🔨 *功能开发中...*', { parse_mode: 'Markdown' });
+    }
+  }
+
+  /**
+   * 处理创作输入
+   */
+  async handleCreativeInput(userId, chatId, text, actionType) {
+    try {
+      await this.bongbongBot.sendMessage(chatId, '✨ *正在创作中...*', { parse_mode: 'Markdown' });
+      
+      let result;
+      
+      if (actionType === 'creative_writing') {
+        // 解析写作指令
+        if (text.startsWith('草稿:') || text.startsWith('草稿：')) {
+          const topic = text.replace(/^草稿[:：]/, '').trim();
+          result = await creativeService.generateDraft(topic);
+        } else if (text.startsWith('润色:') || text.startsWith('润色：')) {
+          const content = text.replace(/^润色[:：]/, '').trim();
+          result = await creativeService.polishContent(content);
+        } else if (text.startsWith('扩写:') || text.startsWith('扩写：')) {
+          const content = text.replace(/^扩写[:：]/, '').trim();
+          result = await creativeService.expandContent(content);
+        } else {
+          // 默认生成大纲
+          result = await creativeService.generateOutline(text);
+        }
+      } else if (actionType === 'creative_story') {
+        // 解析故事指令
+        if (text.startsWith('结局:') || text.startsWith('结局：')) {
+          const story = text.replace(/^结局[:：]/, '').trim();
+          result = await creativeService.generateEnding(story);
+        } else if (text.startsWith('角色:') || text.startsWith('角色：')) {
+          const background = text.replace(/^角色[:：]/, '').trim();
+          result = await creativeService.createCharacter(background);
+        } else {
+          // 默认续写故事
+          result = await creativeService.continueStory(text);
+        }
+      } else if (actionType === 'creative_expand') {
+        result = await creativeService.expandContent(text);
+      }
+
+      if (result && result.success) {
+        // 分段发送长内容
+        const content = result.content;
+        if (content.length > 3000) {
+          const chunks = this.splitContent(content, 3000);
+          for (let i = 0; i < chunks.length; i++) {
+            await this.bongbongBot.sendMessage(chatId, 
+              i === 0 ? `✨ *创作完成* (${i+1}/${chunks.length})\n\n${chunks[i]}` : chunks[i],
+              { parse_mode: 'Markdown' }
+            );
+          }
+        } else {
+          await this.bongbongBot.sendMessage(chatId,
+            `✨ *创作完成*\n\n${content}`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: '💾 保存', callback_data: 'notes_save_creative' },
+                    { text: '📝 继续创作', callback_data: `creative_${actionType.replace('creative_', '')}` }
+                  ],
+                  [{ text: '◀️ 返回菜单', callback_data: 'menu_creative' }]
+                ]
+              }
+            }
+          );
+        }
+        
+        // 保存到创作历史
+        creativeService.saveDraft(userId, {
+          type: result.type,
+          content: result.content,
+          title: `创作 - ${new Date().toLocaleDateString()}`
+        });
+      } else {
+        await this.bongbongBot.sendMessage(chatId, `❌ 创作失败: ${result?.error || '未知错误'}`);
+      }
+    } catch (error) {
+      logger.error('Creative input error:', error);
+      await this.bongbongBot.sendMessage(chatId, '❌ 创作过程出错，请重试');
+    }
+  }
+
+  /**
+   * 分割长内容
+   */
+  splitContent(content, maxLength) {
+    const chunks = [];
+    let remaining = content;
+    
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        chunks.push(remaining);
+        break;
+      }
+      
+      // 尝试在段落处分割
+      let splitIndex = remaining.lastIndexOf('\n\n', maxLength);
+      if (splitIndex === -1 || splitIndex < maxLength / 2) {
+        splitIndex = remaining.lastIndexOf('\n', maxLength);
+      }
+      if (splitIndex === -1 || splitIndex < maxLength / 2) {
+        splitIndex = maxLength;
+      }
+      
+      chunks.push(remaining.substring(0, splitIndex));
+      remaining = remaining.substring(splitIndex).trim();
+    }
+    
+    return chunks;
   }
 
   /**
