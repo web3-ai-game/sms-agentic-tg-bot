@@ -86,6 +86,7 @@ class SmartMemoryService {
 
   /**
    * 分析内容重要性和类别
+   * 使用 Gemini 2.5 Flash-Lite（廉价模型）自动添加记忆向量
    */
   async analyzeContent(content, context = {}) {
     if (!this.gemini) {
@@ -93,11 +94,12 @@ class SmartMemoryService {
     }
 
     try {
+      // 使用廉价模型进行向量记忆分析
       const model = this.gemini.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.0-flash',  // 廉价稳定模型
         generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 1024
+          temperature: 0.2,  // 低温度，更确定性
+          maxOutputTokens: 512  // 减少 token 消耗
         }
       });
 

@@ -1071,6 +1071,13 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
         botName: 'qitiandashengqianqian_bot'
       });
 
+      // 🧠 自动添加到智能记忆（后台静默执行，不阻塞）
+      smartMemoryService.smartSave(response, {
+        userId,
+        userName,
+        source: 'visa_consultation'
+      }).catch(e => logger.error('Auto memory save error:', e));
+
       logger.info(`Visa query handled for ${userName}: ${question.substring(0, 50)}...`);
     } catch (error) {
       logger.error('Visa query error:', error);

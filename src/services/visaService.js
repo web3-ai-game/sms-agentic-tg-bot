@@ -123,27 +123,25 @@ class VisaService {
   }
 
   /**
-   * 处理签证咨询 - 深度分析模式
+   * 处理签证咨询 - 完全使用 Grok
    * 
-   * 流程:
-   * 1. Grok 扩散关键词，生成相关问题
-   * 2. Gemini 2.5 Pro 深度分析，长文输出
+   * 模型分配策略:
+   * - Grok: 签证咨询、思维联想、深度分析（燃烧 token）
+   * - Gemini 2.5 Flash: 长上下文处理
+   * - Gemini 2.5 Flash-Lite: 向量记忆、廉价任务
    */
   async handleVisaQuery(question, userName = '') {
     logger.info(`Visa query from ${userName}: ${question}`);
 
     try {
-      // 1. Grok 扩散关键词
-      const expandedQuestions = await this.expandWithGrok(question);
-      
-      // 2. Gemini Pro 深度分析
-      const analysis = await this.analyzeWithGeminiPro(question, expandedQuestions);
+      // 完全使用 Grok 处理签证问题
+      const analysis = await this.analyzeWithGrok(question, userName);
       
       return {
         success: true,
-        response: analysis,
-        expandedQuestions,
-        model: 'Gemini 2.5 Pro',
+        response: analysis.response,
+        expandedQuestions: analysis.expandedQuestions || [],
+        model: 'Grok-3',
         mode: 'visa_consultation'
       };
     } catch (error) {
@@ -157,6 +155,81 @@ class VisaService {
         mode: 'visa_consultation'
       };
     }
+  }
+
+  /**
+   * 使用 Grok 完整处理签证问题
+   */
+  async analyzeWithGrok(question, userName) {
+    if (!this.grok) {
+      throw new Error('Grok not initialized');
+    }
+
+    const knowledgeBase = JSON.stringify(THAILAND_VISA_KB, null, 2);
+
+    const response = await this.grok.chat.completions.create({
+      model: 'grok-3-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `你是泰国签证和移民政策专家。请用**简体中文**详细回答用户的签证问题。
+
+## 泰国签证知识库
+${knowledgeBase}
+
+## 回答要求
+1. **语言**: 必须使用简体中文
+2. **格式**: 使用 Markdown 格式（标题、列表、表格）
+3. **深度**: 详细分析，给出具体建议
+4. **实用**: 包含费用、材料、时间等实用信息
+5. **时效**: 注明政策的时效性
+
+## 回答结构
+### 📋 问题概述
+[简要说明]
+
+### 🔍 详细分析
+[深入分析]
+
+### ✅ 建议方案
+[具体建议]
+
+### ⚠️ 注意事项
+[重要提醒]`
+        },
+        {
+          role: 'user',
+          content: question
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 4096
+    });
+
+    const text = response.choices[0]?.message?.content || '';
+    
+    // 提取扩展问题
+    const expandedQuestions = this.extractRelatedQuestions(text);
+
+    return {
+      response: text,
+      expandedQuestions
+    };
+  }
+
+  /**
+   * 提取相关问题
+   */
+  extractRelatedQuestions(text) {
+    const questions = [];
+    // 简单提取可能的相关问题
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (line.includes('？') && line.length < 50) {
+        questions.push(line.replace(/^[-•\d.]\s*/, '').trim());
+      }
+    }
+    return questions.slice(0, 3);
   }
 
   /**
