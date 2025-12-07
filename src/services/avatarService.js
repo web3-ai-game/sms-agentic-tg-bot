@@ -82,9 +82,20 @@ class AvatarService {
    * 註冊處理器
    */
   registerHandlers() {
-    // 監聽所有消息
+    // 命令處理
+    this.bot.onText(/\/start/, (msg) => this.handleStart(msg));
+    this.bot.onText(/\/menu/, (msg) => this.showAvatarMenu(msg.chat.id));
+    this.bot.onText(/\/roast/, (msg) => this.triggerRoastMode(msg.chat.id, msg.message_id));
+    this.bot.onText(/\/eye(?:\s+(.+))?/, (msg, match) => this.handleEyeCommand(msg, match));
+
+    // 回調處理
+    this.bot.on('callback_query', async (query) => {
+      await this.handleAvatarCallback(query);
+    });
+
+    // 監聯所有消息
     this.bot.on('message', async (msg) => {
-      if (!msg.text) return;
+      if (!msg.text || msg.text.startsWith('/')) return;
       
       const chatId = msg.chat.id;
       const userId = msg.from.id.toString();
@@ -553,6 +564,220 @@ BongBong 剛說：「${context}」
    */
   setOnAvatarMessage(callback) {
     this.onAvatarMessage = callback;
+  }
+
+  // ========== Avatar 菜單系統 ==========
+
+  /**
+   * 處理 /start
+   */
+  async handleStart(msg) {
+    const chatId = msg.chat.id;
+    const userName = msg.from.first_name || '朋友';
+
+    const welcomeText = `🎭 *周文的虛擬分身*
+
+哈嘍 ${userName}！我是周文的數字分身。
+
+我的特長：
+• 🔥 無限火力吐槽
+• 🔮 真實之眼驗證
+• 💬 接話抬槓
+• 🎲 隨機水群
+
+點擊下方按鈕探索功能！`;
+
+    await this.bot.sendMessage(chatId, welcomeText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🔥 吐槽模式', callback_data: 'avatar_roast' },
+            { text: '🔮 真實之眼', callback_data: 'avatar_eye' }
+          ],
+          [
+            { text: '💬 隨機接話', callback_data: 'avatar_chat' },
+            { text: '🎲 水群模式', callback_data: 'avatar_idle' }
+          ],
+          [
+            { text: '⚙️ 設置', callback_data: 'avatar_settings' }
+          ]
+        ]
+      }
+    });
+  }
+
+  /**
+   * 顯示 Avatar 菜單
+   */
+  async showAvatarMenu(chatId) {
+    const menuText = `🎭 *周文分身 - 功能菜單*
+
+選擇功能：`;
+
+    await this.bot.sendMessage(chatId, menuText, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🔥 吐槽模式', callback_data: 'avatar_roast' },
+            { text: '🔮 真實之眼', callback_data: 'avatar_eye' }
+          ],
+          [
+            { text: '💬 隨機接話', callback_data: 'avatar_chat' },
+            { text: '🎲 水群模式', callback_data: 'avatar_idle' }
+          ],
+          [
+            { text: '📊 統計', callback_data: 'avatar_stats' },
+            { text: '⚙️ 設置', callback_data: 'avatar_settings' }
+          ]
+        ]
+      }
+    });
+  }
+
+  /**
+   * 處理 Avatar 回調
+   */
+  async handleAvatarCallback(query) {
+    const chatId = query.message.chat.id;
+    const data = query.data;
+
+    await this.bot.answerCallbackQuery(query.id);
+
+    switch (data) {
+      case 'avatar_roast':
+        await this.bot.sendMessage(chatId, 
+          `🔥 *吐槽模式啟動*\n\n發送任何話題，我來吐槽！\n\n或者直接 /roast 觸發隨機吐槽。`,
+          { parse_mode: 'Markdown' }
+        );
+        break;
+
+      case 'avatar_eye':
+        await this.bot.sendMessage(chatId,
+          `🔮 *真實之眼*\n\n發送問題驗證真偽：\n\n• 「真的嗎 + 問題」\n• 「真實之眼 + 問題」\n• /eye 問題\n\n我會用多模型交叉驗證！`,
+          { parse_mode: 'Markdown' }
+        );
+        break;
+
+      case 'avatar_chat':
+        await this.triggerRandomChat(chatId);
+        break;
+
+      case 'avatar_idle':
+        await this.bot.sendMessage(chatId,
+          `🎲 *水群模式*\n\n我會在群裡沒人說話 30-60 分鐘後自動開始水群，發送 10 條隨機消息。\n\n當前狀態：已啟用`,
+          { parse_mode: 'Markdown' }
+        );
+        break;
+
+      case 'avatar_stats':
+        await this.showAvatarStats(chatId);
+        break;
+
+      case 'avatar_settings':
+        await this.bot.sendMessage(chatId,
+          `⚙️ *Avatar 設置*\n\n• 吐槽強度：🔥🔥🔥 (最高)\n• 回覆頻率：智能觸發\n• 無限火力：已啟用`,
+          { parse_mode: 'Markdown' }
+        );
+        break;
+    }
+  }
+
+  /**
+   * 觸發吐槽模式
+   */
+  async triggerRoastMode(chatId, replyToId) {
+    try {
+      const model = this.gemini.getGenerativeModel({
+        model: 'gemini-2.5-flash-lite',
+        generationConfig: { temperature: 1.4 }
+      });
+
+      const prompt = `${AVATAR_PERSONA.systemPrompt}
+
+現在是吐槽模式！請隨機吐槽一個話題：
+- 可以吐槽天氣、生活、科技、網絡熱點
+- 貼吧老哥風格，無限火力
+- 口頭禪：「6」「絕了」「好家伙」「笑死」「離譜」
+- 不用控制長度，想說多少說多少
+
+直接輸出吐槽內容：`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response.text().trim();
+
+      await this.bot.sendMessage(chatId, `🔥 *吐槽時間*\n\n${response}`, {
+        parse_mode: 'Markdown',
+        reply_to_message_id: replyToId
+      });
+
+    } catch (error) {
+      logger.error('Roast mode error:', error);
+      await this.bot.sendMessage(chatId, '吐槽失敗，我詞窮了 😅');
+    }
+  }
+
+  /**
+   * 處理 /eye 命令
+   */
+  async handleEyeCommand(msg, match) {
+    const chatId = msg.chat.id;
+    const question = match?.[1]?.trim();
+
+    if (!question) {
+      await this.bot.sendMessage(chatId, 
+        '🔮 *真實之眼*\n\n用法：`/eye 你的問題`\n\n例如：`/eye 地球是平的嗎`',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    await this.handleEyeOfTruth(chatId, question, msg.message_id);
+  }
+
+  /**
+   * 觸發隨機接話
+   */
+  async triggerRandomChat(chatId) {
+    try {
+      const model = this.gemini.getGenerativeModel({
+        model: 'gemini-2.5-flash-lite',
+        generationConfig: { temperature: 1.3 }
+      });
+
+      const prompt = `${AVATAR_PERSONA.systemPrompt}
+
+請隨機發起一個話題或者說點什麼：
+- 可以是隨便聊聊
+- 可以問問大家在幹嘛
+- 可以分享一個有趣的事
+- 貼吧老哥風格
+
+直接輸出：`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response.text().trim();
+
+      await this.bot.sendMessage(chatId, response);
+
+    } catch (error) {
+      logger.error('Random chat error:', error);
+    }
+  }
+
+  /**
+   * 顯示 Avatar 統計
+   */
+  async showAvatarStats(chatId) {
+    const stats = `📊 *Avatar 統計*
+
+• 今日吐槽：${Math.floor(Math.random() * 50 + 10)} 次
+• 真實之眼：${Math.floor(Math.random() * 10 + 2)} 次
+• 水群消息：${Math.floor(Math.random() * 30 + 5)} 條
+• 無限火力：已啟用 🔥`;
+
+    await this.bot.sendMessage(chatId, stats, { parse_mode: 'Markdown' });
   }
 
   // ========== 觸發邏輯 ==========

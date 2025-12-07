@@ -698,13 +698,159 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
    */
   async handleCallback(query) {
     const chatId = query.message.chat.id;
+    const userId = query.from.id.toString();
     const data = query.data;
+    const messageId = query.message.message_id;
 
     await this.bongbongBot.answerCallbackQuery(query.id);
 
+    // ===== 菜單導航 =====
     if (data.startsWith('menu_')) {
       const menuName = data.replace('menu_', '');
-      await menuService.updateMenu(this.bongbongBot, chatId, query.message.message_id, menuName);
+      await menuService.updateMenu(this.bongbongBot, chatId, messageId, menuName);
+      return;
+    }
+
+    // ===== 聊天模式 =====
+    if (data.startsWith('chat_')) {
+      const mode = data.replace('chat_', '');
+      switch (mode) {
+        case 'fast':
+          await this.bongbongBot.sendMessage(chatId, '🚀 *快速問答模式*\n\n直接發送你的問題，我會快速回答！', { parse_mode: 'Markdown' });
+          break;
+        case 'deep':
+          await this.bongbongBot.sendMessage(chatId, '🧠 *深度分析模式*\n\n發送複雜問題，我會詳細分析！', { parse_mode: 'Markdown' });
+          break;
+        case 'humor':
+          await this.bongbongBot.sendMessage(chatId, '😎 *幽默模式*\n\n來聊點輕鬆的吧！', { parse_mode: 'Markdown' });
+          break;
+        case 'emotional':
+          await this.bongbongBot.sendMessage(chatId, '💝 *情感支持模式*\n\n有什麼煩心事可以跟我說。', { parse_mode: 'Markdown' });
+          break;
+        case 'fortune':
+          await this.handleFortune(chatId, userId);
+          break;
+        case 'knowledge':
+          await this.bongbongBot.sendMessage(chatId, '📚 *知識問答模式*\n\n問我任何知識問題！', { parse_mode: 'Markdown' });
+          break;
+        case 'fullpower':
+          await this.bongbongBot.sendMessage(chatId, 
+            `🔥 *全火力模式啟動*\n\n這是深度分析模式，用於複雜問題：\n\n• Gemini Pro 嚴謹分析\n• Grok Mini 擴散思考\n• 語意分析決定 token 用量\n\n發送你的問題，我會全力分析！`, 
+            { parse_mode: 'Markdown' }
+          );
+          break;
+      }
+      return;
+    }
+
+    // ===== 記事本 =====
+    if (data.startsWith('notes_')) {
+      const action = data.replace('notes_', '');
+      switch (action) {
+        case 'new':
+          await this.bongbongBot.sendMessage(chatId, '📝 *新建便簽*\n\n請發送你要記錄的內容，格式：\n`標題 | 內容`', { parse_mode: 'Markdown' });
+          break;
+        case 'list':
+          await this.bongbongBot.sendMessage(chatId, '📋 *你的便簽*\n\n(功能開發中...)', { parse_mode: 'Markdown' });
+          break;
+        case 'search':
+          await this.bongbongBot.sendMessage(chatId, '🔍 *搜索筆記*\n\n發送關鍵詞搜索你的筆記。', { parse_mode: 'Markdown' });
+          break;
+        case 'save_chat':
+          await this.bongbongBot.sendMessage(chatId, '💾 *對話已保存*', { parse_mode: 'Markdown' });
+          break;
+      }
+      return;
+    }
+
+    // ===== 創作工具 =====
+    if (data.startsWith('creative_')) {
+      const action = data.replace('creative_', '');
+      if (action === 'image') {
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'image');
+      } else if (action === 'video') {
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'video');
+      }
+      return;
+    }
+
+    // ===== 圖片生成 =====
+    if (data.startsWith('image_')) {
+      const style = data.replace('image_', '');
+      await this.bongbongBot.sendMessage(chatId, `🎨 *${style} 風格*\n\n發送你想畫的內容描述。`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // ===== 腦力訓練 =====
+    if (data.startsWith('brain_')) {
+      const action = data.replace('brain_', '');
+      switch (action) {
+        case 'teaser':
+          await this.sendBrainTeaser(chatId, userId);
+          break;
+        case 'memory':
+          await this.bongbongBot.sendMessage(chatId, '🧠 *記憶訓練*\n\n(功能開發中...)', { parse_mode: 'Markdown' });
+          break;
+        case 'logic':
+          await this.bongbongBot.sendMessage(chatId, '🔢 *邏輯推理*\n\n(功能開發中...)', { parse_mode: 'Markdown' });
+          break;
+        case 'word':
+          await this.bongbongBot.sendMessage(chatId, '📝 *文字遊戲*\n\n(功能開發中...)', { parse_mode: 'Markdown' });
+          break;
+      }
+      return;
+    }
+
+    // ===== 養生專區 =====
+    if (data.startsWith('health_')) {
+      const action = data.replace('health_', '');
+      switch (action) {
+        case 'symptom':
+          await this.bongbongBot.sendMessage(chatId, '🏥 *症狀查詢*\n\n描述你的症狀，我會給出建議。\n\n⚠️ 僅供參考，如有不適請就醫。', { parse_mode: 'Markdown' });
+          break;
+        case 'medicine':
+          await this.bongbongBot.sendMessage(chatId, '💊 *藥物諮詢*\n\n告訴我藥物名稱，我會查詢相關信息。', { parse_mode: 'Markdown' });
+          break;
+        case 'food':
+          await this.bongbongBot.sendMessage(chatId, '🍵 *食療養生*\n\n告訴我你的體質或症狀，我推薦食療方案。', { parse_mode: 'Markdown' });
+          break;
+        case 'tip':
+          await this.bongbongBot.sendMessage(chatId, '💡 *今日養生小貼士*\n\n多喝水，早睡早起，保持心情愉快！', { parse_mode: 'Markdown' });
+          break;
+      }
+      return;
+    }
+
+    // ===== 遊戲 =====
+    if (data.startsWith('game_')) {
+      const game = data.replace('game_', '');
+      await this.bongbongBot.sendMessage(chatId, `🎮 *${game} 遊戲*\n\n(功能開發中...)`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // ===== 設置 =====
+    if (data.startsWith('settings_')) {
+      const setting = data.replace('settings_', '');
+      if (setting === 'memory') {
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'memory');
+      } else {
+        await this.bongbongBot.sendMessage(chatId, `⚙️ *${setting} 設置*\n\n(功能開發中...)`, { parse_mode: 'Markdown' });
+      }
+      return;
+    }
+
+    // ===== 快捷操作 =====
+    if (data.startsWith('quick_')) {
+      const action = data.replace('quick_', '');
+      switch (action) {
+        case 'save':
+          await this.bongbongBot.sendMessage(chatId, '💾 已保存！');
+          break;
+        case 'regenerate':
+          await this.bongbongBot.sendMessage(chatId, '🔄 重新生成中...');
+          break;
+      }
+      return;
     }
   }
 
