@@ -48,7 +48,40 @@ export const CHAT_MENU = {
       { text: '📚 知識問答', callback_data: 'chat_knowledge' }
     ],
     [
+      { text: '🔥 全火力模式', callback_data: 'chat_fullpower' }
+    ],
+    [
       { text: '◀️ 返回主菜單', callback_data: 'menu_main' }
+    ]
+  ]
+};
+
+// 全火力模式說明
+export const FULLPOWER_MODE = {
+  text: `🔥 *全火力模式啟動*
+
+這是一個特殊模式，用於複雜問題的深度分析：
+
+**觸發條件：**
+- 問題真的很複雜
+- 需要多角度分析
+- 現實生活中的實際問題
+
+**模型配置：**
+- Gemini 2.5 Pro (嚴謹分析)
+- Grok 3 Mini (擴散思考)
+- 語意分析決定 token 用量
+
+**注意：**
+- 會消耗較多 token
+- 適合重要問題
+- 不適合閒聊
+
+發送你的問題，我會全力分析！`,
+  
+  keyboard: [
+    [
+      { text: '◀️ 返回聊天菜單', callback_data: 'menu_chat' }
     ]
   ]
 };

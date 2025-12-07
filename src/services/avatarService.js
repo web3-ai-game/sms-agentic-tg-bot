@@ -125,6 +125,9 @@ class AvatarService {
           userName.includes(n) || userId.includes(n)
         );
 
+        // 檢查是否是母親
+        const isMother = userName.includes('Leee') || userName.includes('Cat') || userName.includes('媽');
+
         // 檢查是否觸發真實之眼
         if (eyeOfTruthService.shouldTrigger(msg.text)) {
           logger.info('🔮 Eye of Truth triggered');
@@ -132,21 +135,49 @@ class AvatarService {
           return;
         }
 
-        // 如果是周文本人，檢查是否需要拆解
-        if (isZhouwen && this.shouldDecompose(msg.text)) {
-          logger.info('🔍 Decompose triggered for Zhouwen');
+        // ===== 周文本人的消息處理 =====
+        if (isZhouwen) {
+          // 檢查是否需要拆解
+          if (this.shouldDecompose(msg.text)) {
+            logger.info('🔍 Decompose triggered for Zhouwen');
+            setTimeout(() => {
+              this.decomposeMessage(chatId, msg.text, msg.message_id, userName);
+            }, 1500);
+            return;
+          }
+
+          // 周文的消息觸發條件:
+          // 1. // 開頭
+          // 2. 超過20個漢字
+          // 3. @bot
+          const shouldRespond = this.shouldRespondToZhouwen(msg.text);
+          if (!shouldRespond) {
+            logger.debug('Ignoring Zhouwen message (no trigger)');
+            return;
+          }
+          
+          logger.info('Avatar responding to Zhouwen (triggered)');
           setTimeout(() => {
-            this.decomposeMessage(chatId, msg.text, msg.message_id, userName);
+            this.respondToHuman(chatId, msg.text.replace(/^\/\/\s*/, ''), msg.message_id, userName);
           }, 1500);
           return;
         }
 
-        // 隨機決定是否接話 (70% 概率)
-        if (Math.random() < AVATAR_PERSONA.triggers.responseToHumanRate) {
-          logger.info(`Avatar will respond to ${userName}'s message`);
+        // ===== 母親的消息 - 每條都回覆 =====
+        if (isMother) {
+          logger.info('Avatar responding to Mother (always)');
           setTimeout(() => {
             this.respondToHuman(chatId, msg.text, msg.message_id, userName);
-          }, 2000 + Math.random() * 3000);
+          }, 2000 + Math.random() * 2000);
+          return;
+        }
+
+        // ===== 其他人 - 低概率回覆 =====
+        if (Math.random() < 0.3) {
+          logger.info(`Avatar will respond to ${userName}'s message (30%)`);
+          setTimeout(() => {
+            this.respondToHuman(chatId, msg.text, msg.message_id, userName);
+          }, 3000 + Math.random() * 3000);
         }
       }
     });
@@ -258,11 +289,12 @@ class AvatarService {
         ? `\n\n[最近群聊]\n${groupHistory.reverse().map(m => `${m.userName}: ${m.content}`).join('\n')}`
         : '';
 
+      // 無限火力模式 - 不限制 token 長度
       const model = this.gemini.getGenerativeModel({
         model: 'gemini-2.5-flash-lite',
         generationConfig: {
-          temperature: AVATAR_PERSONA.personality.temperature,
-          maxOutputTokens: 150  // 保持簡短
+          temperature: AVATAR_PERSONA.personality.temperature
+          // 不設置 maxOutputTokens，讓模型自己決定長度
         }
       });
 
@@ -275,11 +307,12 @@ class AvatarService {
 
 ${userName} 剛說：「${context}」
 
-請用周文的風格回覆，要求：
-1. 簡短，1-2句話
-2. ${isMother ? '對母親要表面嫌棄但實際關心' : '貼吧老哥風格，可以吐槽'}
-3. 可以接話、吐槽、或者發表看法
-4. 口頭禪：「得了吧」「行吧」「就這？」「6」「絕了」
+請用周文的風格回覆，你是主力噴子，無限火力模式！要求：
+1. ${isMother ? '對母親要表面嫌棄但實際關心，可以多說幾句' : '貼吧老哥風格，可以長篇大論吐槽'}
+2. 可以接話、吐槽、抬槓、發表看法
+3. 口頭禪：「得了吧」「行吧」「就這？」「6」「絕了」「好家伙」「笑死」
+4. 不用控制長度，想說多少說多少，但要有趣
+5. 可以隨機拋梗、扯淡、無厘頭聯想
 
 直接輸出回覆，不要加任何前綴：`;
           break;
@@ -289,10 +322,10 @@ ${userName} 剛說：「${context}」
 
 BongBong 剛說：「${context}」
 
-請用周文的風格接話，要求：
-1. 簡短，1-2句話
-2. 可以吐槽 BongBong 太正經
-3. 保持貼吧老哥風格
+請用周文的風格接話，你是主力噴子！要求：
+1. 可以吐槽 BongBong 太正經
+2. 保持貼吧老哥風格，可以長篇大論
+3. 不用控制長度，想噴多少噴多少
 
 直接輸出回覆，不要加任何前綴：`;
           break;
@@ -520,6 +553,32 @@ BongBong 剛說：「${context}」
    */
   setOnAvatarMessage(callback) {
     this.onAvatarMessage = callback;
+  }
+
+  // ========== 觸發邏輯 ==========
+
+  /**
+   * 檢查是否應該回覆周文
+   * 條件: // 開頭 或 超過20漢字 或 @bot
+   */
+  shouldRespondToZhouwen(message) {
+    // 1. // 開頭
+    if (message.startsWith('//')) {
+      return true;
+    }
+
+    // 2. @bot
+    if (message.includes('@svs_notion_bot') || message.includes('@qitiandashengqianqian_bot')) {
+      return true;
+    }
+
+    // 3. 超過20個漢字
+    const chineseChars = message.match(/[\u4e00-\u9fa5]/g) || [];
+    if (chineseChars.length > 20) {
+      return true;
+    }
+
+    return false;
   }
 
   // ========== 新功能: 拆解 ==========
