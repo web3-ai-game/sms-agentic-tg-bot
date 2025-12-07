@@ -27,6 +27,7 @@ import visaService, { VISA_KEYWORDS } from './visaService.js';
 import segmentService from './segmentService.js';
 import notebookService from './notebookService.js';
 import smartMemoryService from './smartMemoryService.js';
+import notionSyncService from './notionSyncService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -85,6 +86,7 @@ class DualBotService {
       await visaService.init();  // 签证咨询服务
       await notebookService.connect();  // 多用户笔记本
       await smartMemoryService.init();  // 智能记忆系统
+      await notionSyncService.initialize();  // Notion 同步服务
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -184,6 +186,15 @@ class DualBotService {
           content: text,
           isBot: false
         });
+        
+        // 同步到 Notion (用户消息全量复制)
+        notionSyncService.addMessage({
+          isBot: false,
+          userId,
+          userName,
+          content: text,
+          action: 'chat'
+        }).catch(err => logger.debug('Notion sync error:', err.message));
       }
 
       // 檢測關鍵詞
@@ -259,6 +270,15 @@ class DualBotService {
           isBot: true,
           botName: 'qitiandashengqianqian_bot'
         });
+        
+        // 同步到 Notion (AI消息摘要)
+        notionSyncService.addMessage({
+          isBot: true,
+          userId: 'bongbong',
+          userName: 'BongBong',
+          content: result.response,
+          action: 'chat'
+        }).catch(err => logger.debug('Notion sync error:', err.message));
 
         // 通知 Avatar 接話
         if (this.avatarBot) {
