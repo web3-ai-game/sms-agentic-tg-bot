@@ -24,6 +24,8 @@ import newsService from './newsService.js';
 import imageService from './imageService.js';
 import visionService from './visionService.js';
 import visaService, { VISA_KEYWORDS } from './visaService.js';
+import segmentService from './segmentService.js';
+import notebookService from './notebookService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -80,6 +82,7 @@ class DualBotService {
       await imageService.init();
       visionService.init();
       await visaService.init();  // 签证咨询服务
+      await notebookService.connect();  // 多用户笔记本
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -887,6 +890,18 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
       }
       return;
     }
+
+    // ===== 分段保存 =====
+    if (data.startsWith('seg_')) {
+      await this.handleSegmentCallback(chatId, userId, data, messageId);
+      return;
+    }
+
+    // ===== 笔记本操作 =====
+    if (data.startsWith('notes_')) {
+      await this.handleNotesCallback(chatId, userId, data, messageId);
+      return;
+    }
   }
 
   /**
@@ -969,20 +984,39 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
         // 忽略删除失败
       }
 
-      // 发送结果（分段发送长消息）
-      const chunks = this.splitMessage(response, 4000);
-      for (const chunk of chunks) {
-        await this.bongbongBot.sendMessage(chatId, chunk, { 
+      // 分段发送，每段带保存按钮
+      const segments = segmentService.splitIntoSegments(response);
+      
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        const segmentId = segmentService.cacheSegment(segment.content, chatId);
+        
+        // 构建迷你按钮
+        const buttons = [
+          [
+            { text: '💾 存妈', callback_data: `seg_mom_${segmentId}` },
+            { text: '💾 存我', callback_data: `seg_me_${segmentId}` },
+            { text: '📋', callback_data: `seg_copy_${segmentId}` }
+          ]
+        ];
+        
+        // 最后一段添加导航按钮
+        if (i === segments.length - 1) {
+          buttons.push([
+            { text: '📋 更多签证问题', callback_data: 'visa_more' },
+            { text: '🏠 返回菜单', callback_data: 'menu_main' }
+          ]);
+        }
+        
+        await this.bongbongBot.sendMessage(chatId, segment.content, { 
           parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '📋 更多签证问题', callback_data: 'visa_more' },
-                { text: '🏠 返回菜单', callback_data: 'menu_main' }
-              ]
-            ]
-          }
+          reply_markup: { inline_keyboard: buttons }
         });
+        
+        // 段落间短暂延迟
+        if (i < segments.length - 1) {
+          await this.sleep(300);
+        }
       }
 
       // 记录到群记忆
@@ -1035,6 +1069,127 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
     if (question) {
       await this.handleVisaQuery(chatId, userId, userName, question);
     }
+  }
+
+  /**
+   * 处理分段保存回调
+   */
+  async handleSegmentCallback(chatId, userId, data, messageId) {
+    // 解析: seg_mom_xxx 或 seg_me_xxx 或 seg_copy_xxx
+    const parts = data.split('_');
+    if (parts.length < 3) return;
+    
+    const action = parts[1];  // mom, me, copy
+    const segmentId = parts.slice(2).join('_');
+    
+    // 获取缓存的内容
+    const cached = segmentService.getSegment(segmentId);
+    if (!cached) {
+      await this.bongbongBot.answerCallbackQuery(null, { 
+        text: '⏰ 内容已过期，请重新查询' 
+      });
+      return;
+    }
+    
+    switch (action) {
+      case 'mom':
+        // 保存到母亲笔记本
+        const momResult = await notebookService.saveToMotherNotebook(cached.content, {
+          source: 'ai_output',
+          category: 'ai_knowledge'
+        });
+        if (momResult.success) {
+          await this.bongbongBot.sendMessage(chatId, '✅ 已保存到 **妈妈的笔记本**', { parse_mode: 'Markdown' });
+        }
+        break;
+        
+      case 'me':
+        // 保存到我的笔记本
+        const meResult = await notebookService.saveToMyNotebook(userId, cached.content, {
+          source: 'ai_output',
+          category: 'ai_knowledge'
+        });
+        if (meResult.success) {
+          await this.bongbongBot.sendMessage(chatId, '✅ 已保存到 **我的笔记本**', { parse_mode: 'Markdown' });
+        }
+        break;
+        
+      case 'copy':
+        // 提示复制（Telegram 不支持直接复制）
+        await this.bongbongBot.sendMessage(chatId, '📋 **复制提示**\n\n长按上方消息可复制内容', { parse_mode: 'Markdown' });
+        break;
+    }
+  }
+
+  /**
+   * 处理笔记本回调
+   */
+  async handleNotesCallback(chatId, userId, data, messageId) {
+    const action = data.replace('notes_', '');
+    
+    switch (action) {
+      case 'mother':
+        // 显示母亲的笔记
+        const momNotes = await notebookService.getMotherNotes({ limit: 10 });
+        await this.showNotesListFormatted(chatId, momNotes, '👩‍🦳 妈妈的笔记本');
+        break;
+        
+      case 'mine':
+        // 显示我的笔记
+        const myNotes = await notebookService.getMyNotes(userId, { limit: 10 });
+        await this.showNotesListFormatted(chatId, myNotes, '👨‍💻 我的笔记本');
+        break;
+        
+      case 'new':
+        this.pendingAction.set(userId, { type: 'note_new', chatId });
+        await this.bongbongBot.sendMessage(chatId, '📝 **新建笔记**\n\n请发送内容，格式：\n`标题 | 内容`\n\n例如：`购物清单 | 牛奶、面包、鸡蛋`', { parse_mode: 'Markdown' });
+        break;
+        
+      case 'list':
+        await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'notes');
+        break;
+        
+      case 'search':
+        this.pendingAction.set(userId, { type: 'note_search', chatId });
+        await this.bongbongBot.sendMessage(chatId, '🔍 **搜索笔记**\n\n请输入关键词搜索', { parse_mode: 'Markdown' });
+        break;
+    }
+  }
+
+  /**
+   * 格式化显示笔记列表
+   */
+  async showNotesListFormatted(chatId, notes, title) {
+    if (!notes || notes.length === 0) {
+      await this.bongbongBot.sendMessage(chatId, `${title}\n\n📭 还没有笔记`, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '➕ 新建笔记', callback_data: 'notes_new' },
+            { text: '◀️ 返回', callback_data: 'menu_notes' }
+          ]]
+        }
+      });
+      return;
+    }
+    
+    let text = `${title}\n\n`;
+    notes.forEach((note, i) => {
+      const date = new Date(note.createdAt).toLocaleDateString('zh-CN');
+      const tags = note.tags?.length > 0 ? ` [${note.tags.join(', ')}]` : '';
+      text += `${i + 1}. **${note.title}**${tags}\n   ${note.content.substring(0, 40)}...\n   📅 ${date}\n\n`;
+    });
+    
+    await this.bongbongBot.sendMessage(chatId, text, { 
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '➕ 新建', callback_data: 'notes_new' },
+          { text: '🔍 搜索', callback_data: 'notes_search' },
+          { text: '◀️ 返回', callback_data: 'menu_notes' }
+        ]]
+      }
+    });
   }
 
   /**

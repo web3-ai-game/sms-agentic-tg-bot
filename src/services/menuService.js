@@ -4,26 +4,27 @@
  * 為母親設計的友好界面，無需輸入 /指令
  */
 
+// 功能状态标记
+// ✅ = 已完成  🔨 = 开发中  📋 = 计划中
+
 export const MAIN_MENU = {
   text: `🎭 **BongBong 主菜单**
 
-选择你想要的功能：`,
+选择功能 (✅已完成 🔨开发中)：`,
   
   keyboard: [
     [
-      { text: '💬 聊天对话', callback_data: 'menu_chat' },
-      { text: '📝 记事本', callback_data: 'menu_notes' }
+      { text: '💬 聊天', callback_data: 'menu_chat' },
+      { text: '📝 笔记 ✅', callback_data: 'menu_notes' },
+      { text: '🛂 签证 ✅', callback_data: 'menu_visa' }
     ],
     [
-      { text: '🛂 签证咨询', callback_data: 'menu_visa' },
-      { text: '🌿 养生专区', callback_data: 'menu_health' }
+      { text: '🌿 养生 🔨', callback_data: 'menu_health' },
+      { text: '🧠 脑力 🔨', callback_data: 'menu_brain' },
+      { text: '🎨 创作 🔨', callback_data: 'menu_creative' }
     ],
     [
-      { text: '🎨 创作工具', callback_data: 'menu_creative' },
-      { text: '🧠 脑力训练', callback_data: 'menu_brain' }
-    ],
-    [
-      { text: '🎮 休闲游戏', callback_data: 'menu_games' },
+      { text: '🎮 游戏 📋', callback_data: 'menu_games' },
       { text: '⚙️ 设置', callback_data: 'menu_settings' }
     ]
   ]
@@ -87,21 +88,22 @@ export const FULLPOWER_MODE = {
 };
 
 export const NOTES_MENU = {
-  text: `📝 **记事本**
+  text: `📝 **笔记本**
 
-管理你的笔记和便签：`,
+选择笔记本：`,
   
   keyboard: [
     [
-      { text: '➕ 新建便签', callback_data: 'notes_new' },
-      { text: '📋 查看全部', callback_data: 'notes_list' }
+      { text: '👩‍🦳 妈妈的笔记', callback_data: 'notes_mother' },
+      { text: '👨‍💻 我的笔记', callback_data: 'notes_mine' }
     ],
     [
-      { text: '🔍 搜索笔记', callback_data: 'notes_search' },
-      { text: '💾 保存对话', callback_data: 'notes_save_chat' }
+      { text: '➕ 新建', callback_data: 'notes_new' },
+      { text: '📋 全部', callback_data: 'notes_list' },
+      { text: '🔍 搜索', callback_data: 'notes_search' }
     ],
     [
-      { text: '◀️ 返回主菜单', callback_data: 'menu_main' }
+      { text: '◀️ 返回', callback_data: 'menu_main' }
     ]
   ]
 };
