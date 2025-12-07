@@ -296,22 +296,35 @@ class AvatarService {
 
       // 延遲後接話
       setTimeout(async () => {
-        const response = await this.generateAvatarResponse(chatId, bongbongMessage, 'afterBongBong');
-        
-        if (response) {
-          await this.bot.sendMessage(chatId, response, {
-            reply_to_message_id: bongbongMessageId
-          });
+        try {
+          const response = await this.generateAvatarResponse(chatId, bongbongMessage, 'afterBongBong');
+          
+          if (response) {
+            // 嘗試回覆，如果失敗就直接發送
+            try {
+              await this.bot.sendMessage(chatId, response, {
+                reply_to_message_id: bongbongMessageId
+              });
+            } catch (replyError) {
+              if (replyError.message?.includes('message to be replied not found')) {
+                await this.bot.sendMessage(chatId, response);
+              } else {
+                throw replyError;
+              }
+            }
 
-          // 記錄到群記憶
-          await groupMemoryService.logGroupMessage({
-            groupId: chatId.toString(),
-            userId: 'avatar',
-            userName: '周文 (虛擬)',
-            content: response,
-            isBot: true,
-            botName: 'svs_notion_bot'
-          });
+            // 記錄到群記憶
+            await groupMemoryService.logGroupMessage({
+              groupId: chatId.toString(),
+              userId: 'avatar',
+              userName: '周文 (虛擬)',
+              content: response,
+              isBot: true,
+              botName: 'svs_notion_bot'
+            });
+          }
+        } catch (error) {
+          logger.error('Error in respondToBongBong timeout:', error.message);
         }
       }, AVATAR_PERSONA.triggers.afterBongBongDelay);
 

@@ -40,6 +40,9 @@ class DualBotService {
     // 計時器
     this.idleTimers = new Map();
     this.dailyPraiseTimer = null;
+    
+    // 待處理操作 (便簽、搜索等)
+    this.pendingAction = new Map();
   }
 
   /**
@@ -160,6 +163,10 @@ class DualBotService {
     const isGroup = msg.chat.type === 'group' || msg.chat.type === 'supergroup';
 
     try {
+      // 檢查是否有待處理操作 (便簽、搜索等)
+      const handled = await this.handlePendingAction(userId, chatId, text);
+      if (handled) return;
+
       // 記錄到群記憶
       if (isGroup) {
         await groupMemoryService.logGroupMessage({
@@ -270,9 +277,18 @@ class DualBotService {
       // 延遲後爆擊回覆
       setTimeout(async () => {
         try {
-          await this.bongbongBot.sendMessage(chatId, `🎯 ${counterResult.response}`, {
-            reply_to_message_id: messageId
-          });
+          // 嘗試回覆，如果失敗就直接發送
+          try {
+            await this.bongbongBot.sendMessage(chatId, `🎯 ${counterResult.response}`, {
+              reply_to_message_id: messageId
+            });
+          } catch (replyError) {
+            if (replyError.message?.includes('message to be replied not found')) {
+              await this.bongbongBot.sendMessage(chatId, `🎯 ${counterResult.response}`);
+            } else {
+              throw replyError;
+            }
+          }
 
           // 記錄到群記憶
           await groupMemoryService.logGroupMessage({
@@ -286,7 +302,7 @@ class DualBotService {
 
           logger.info(`BongBong counter-attacked in group ${chatId}`);
         } catch (error) {
-          logger.error('Counter attack send error:', error);
+          logger.error('Counter attack send error:', error.message);
         }
       }, 2000);
     }
@@ -749,16 +765,18 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
       const action = data.replace('notes_', '');
       switch (action) {
         case 'new':
-          await this.bongbongBot.sendMessage(chatId, '📝 *新建便簽*\n\n請發送你要記錄的內容，格式：\n`標題 | 內容`', { parse_mode: 'Markdown' });
+          this.pendingAction.set(userId, { type: 'note_new', chatId });
+          await this.bongbongBot.sendMessage(chatId, '📝 *新建便簽*\n\n請發送你要記錄的內容，格式：\n`標題 | 內容`\n\n例如：`購物清單 | 牛奶、麵包、雞蛋`', { parse_mode: 'Markdown' });
           break;
         case 'list':
-          await this.bongbongBot.sendMessage(chatId, '📋 *你的便簽*\n\n(功能開發中...)', { parse_mode: 'Markdown' });
+          await this.showNotesList(chatId, userId);
           break;
         case 'search':
+          this.pendingAction.set(userId, { type: 'note_search', chatId });
           await this.bongbongBot.sendMessage(chatId, '🔍 *搜索筆記*\n\n發送關鍵詞搜索你的筆記。', { parse_mode: 'Markdown' });
           break;
         case 'save_chat':
-          await this.bongbongBot.sendMessage(chatId, '💾 *對話已保存*', { parse_mode: 'Markdown' });
+          await this.saveCurrentChat(chatId, userId);
           break;
       }
       return;
@@ -893,6 +911,94 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 顯示便簽列表
+   */
+  async showNotesList(chatId, userId) {
+    try {
+      const notes = await memoryService.getAllNotes(userId, 10);
+      
+      if (notes.length === 0) {
+        await this.bongbongBot.sendMessage(chatId, '📋 *你的便簽*\n\n還沒有任何便簽，點擊「新建便簽」創建一個吧！', { parse_mode: 'Markdown' });
+        return;
+      }
+      
+      let text = '📋 *你的便簽*\n\n';
+      notes.forEach((note, i) => {
+        const date = new Date(note.createdAt).toLocaleDateString('zh-TW');
+        text += `${i + 1}. *${note.title}*\n   ${note.content.substring(0, 50)}${note.content.length > 50 ? '...' : ''}\n   📅 ${date}\n\n`;
+      });
+      
+      await this.bongbongBot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    } catch (error) {
+      logger.error('Error showing notes list:', error);
+      await this.bongbongBot.sendMessage(chatId, '❌ 獲取便簽失敗');
+    }
+  }
+
+  /**
+   * 保存當前對話
+   */
+  async saveCurrentChat(chatId, userId) {
+    try {
+      const history = this.getHistory(userId);
+      if (history.length === 0) {
+        await this.bongbongBot.sendMessage(chatId, '❌ 沒有可保存的對話');
+        return;
+      }
+      
+      const content = history.map(h => `${h.role === 'user' ? '我' : 'BongBong'}: ${h.content}`).join('\n');
+      const title = `對話記錄 ${new Date().toLocaleDateString('zh-TW')}`;
+      
+      await memoryService.saveNote(userId, title, content, ['對話', '自動保存']);
+      await this.bongbongBot.sendMessage(chatId, '💾 *對話已保存*\n\n已保存最近的對話記錄到便簽。', { parse_mode: 'Markdown' });
+    } catch (error) {
+      logger.error('Error saving chat:', error);
+      await this.bongbongBot.sendMessage(chatId, '❌ 保存失敗');
+    }
+  }
+
+  /**
+   * 處理待處理操作
+   */
+  async handlePendingAction(userId, chatId, text) {
+    const action = this.pendingAction.get(userId);
+    if (!action) return false;
+    
+    this.pendingAction.delete(userId);
+    
+    switch (action.type) {
+      case 'note_new':
+        // 解析標題和內容
+        const parts = text.split('|').map(s => s.trim());
+        const title = parts[0] || '無標題';
+        const content = parts.slice(1).join('|') || parts[0];
+        
+        const note = await memoryService.saveNote(userId, title, content);
+        if (note) {
+          await this.bongbongBot.sendMessage(chatId, `✅ *便簽已保存*\n\n📌 *${title}*\n${content}`, { parse_mode: 'Markdown' });
+        } else {
+          await this.bongbongBot.sendMessage(chatId, '❌ 保存失敗，請重試');
+        }
+        return true;
+        
+      case 'note_search':
+        const results = await memoryService.searchNotes(userId, text);
+        if (results.length === 0) {
+          await this.bongbongBot.sendMessage(chatId, `🔍 *搜索結果*\n\n沒有找到包含「${text}」的便簽`, { parse_mode: 'Markdown' });
+        } else {
+          let resultText = `🔍 *搜索結果* (${results.length})\n\n`;
+          results.forEach((note, i) => {
+            resultText += `${i + 1}. *${note.title}*\n   ${note.content.substring(0, 50)}...\n\n`;
+          });
+          await this.bongbongBot.sendMessage(chatId, resultText, { parse_mode: 'Markdown' });
+        }
+        return true;
+    }
+    
+    return false;
   }
 
   /**

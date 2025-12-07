@@ -6,6 +6,7 @@ export default {
   // Telegram配置
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN,
+    avatarBotToken: process.env.TELEGRAM_BOT_TOKEN_AVATAR,
     chatId: process.env.TELEGRAM_CHAT_ID,
   },
 
@@ -13,6 +14,16 @@ export default {
   apiKeys: {
     gemini: process.env.GEMINI_API_KEY || process.env.GEMINI_API_OECE_TECH_,
     grok: process.env.GROK_API_KEY || process.env.GROK_ONE_,
+  },
+
+  // Gemini 配置
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || process.env.GEMINI_API_OECE_TECH_,
+  },
+
+  // Grok 配置
+  grok: {
+    apiKey: process.env.GROK_API_KEY || process.env.GROK_ONE_,
   },
 
   // 模型配置 - 經濟優先，Gemini 贈金支撐

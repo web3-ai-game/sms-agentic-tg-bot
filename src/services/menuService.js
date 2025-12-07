@@ -363,14 +363,26 @@ class MenuService {
     const menu = this.getMenu(menuName);
     const text = customText || menu.text;
     
-    return await bot.editMessageText(text, {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: menu.keyboard
+    try {
+      return await bot.editMessageText(text, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: menu.keyboard
+        }
+      });
+    } catch (error) {
+      // 忽略 "message is not modified" 錯誤
+      if (error.message?.includes('message is not modified')) {
+        return null;
       }
-    });
+      // 如果消息不存在，發送新菜單
+      if (error.message?.includes('message to edit not found')) {
+        return await this.sendMenu(bot, chatId, menuName, customText);
+      }
+      throw error;
+    }
   }
 
   /**
