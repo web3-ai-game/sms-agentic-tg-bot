@@ -728,6 +728,7 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
   async handleCallback(query) {
     const chatId = query.message.chat.id;
     const userId = query.from.id.toString();
+    const userName = query.from.first_name || '用户';
     const data = query.data;
     const messageId = query.message.message_id;
 

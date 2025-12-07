@@ -210,8 +210,9 @@ class VisaService {
       return this.getBasicVisaInfo(originalQuestion);
     }
 
+    // 使用可用的 Gemini Pro 模型
     const model = this.gemini.getGenerativeModel({
-      model: 'gemini-2.5-pro-preview-06-05',
+      model: 'gemini-2.0-flash',  // 稳定可用的模型
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 8192  // 长文输出
