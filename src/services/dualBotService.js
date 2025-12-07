@@ -26,6 +26,7 @@ import visionService from './visionService.js';
 import visaService, { VISA_KEYWORDS } from './visaService.js';
 import segmentService from './segmentService.js';
 import notebookService from './notebookService.js';
+import smartMemoryService from './smartMemoryService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -83,6 +84,7 @@ class DualBotService {
       visionService.init();
       await visaService.init();  // 签证咨询服务
       await notebookService.connect();  // 多用户笔记本
+      await smartMemoryService.init();  // 智能记忆系统
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -903,6 +905,44 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
       await this.handleNotesCallback(chatId, userId, data, messageId);
       return;
     }
+
+    // ===== 记忆统计 =====
+    if (data === 'memory_stats') {
+      await this.showMemoryStats(chatId);
+      return;
+    }
+  }
+
+  /**
+   * 显示记忆统计
+   */
+  async showMemoryStats(chatId) {
+    try {
+      const stats = await smartMemoryService.getStats();
+      
+      let text = `📊 **智能记忆统计**\n\n`;
+      text += `📝 总记忆数: ${stats.totalMemories}\n`;
+      text += `📓 自动笔记: ${stats.autoNotes}\n\n`;
+      
+      if (Object.keys(stats.byCategory).length > 0) {
+        text += `**按分类:**\n`;
+        for (const [cat, count] of Object.entries(stats.byCategory)) {
+          text += `• ${cat}: ${count}\n`;
+        }
+      }
+      
+      await this.bongbongBot.sendMessage(chatId, text, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🏠 返回菜单', callback_data: 'menu_main' }
+          ]]
+        }
+      });
+    } catch (error) {
+      logger.error('ShowMemoryStats error:', error);
+      await this.bongbongBot.sendMessage(chatId, '❌ 获取统计失败');
+    }
   }
 
   /**
@@ -992,12 +1032,13 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
         const segment = segments[i];
         const segmentId = segmentService.cacheSegment(segment.content, chatId);
         
-        // 构建迷你按钮
+        // 构建迷你按钮 - 每段都有保存/复制/扩展
         const buttons = [
           [
             { text: '💾 存妈', callback_data: `seg_mom_${segmentId}` },
             { text: '💾 存我', callback_data: `seg_me_${segmentId}` },
-            { text: '📋', callback_data: `seg_copy_${segmentId}` }
+            { text: '📋', callback_data: `seg_copy_${segmentId}` },
+            { text: '🔍', callback_data: `seg_expand_${segmentId}` }
           ]
         ];
         
@@ -1076,49 +1117,134 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
    * 处理分段保存回调
    */
   async handleSegmentCallback(chatId, userId, data, messageId) {
-    // 解析: seg_mom_xxx 或 seg_me_xxx 或 seg_copy_xxx
+    // 解析: seg_mom_xxx 或 seg_me_xxx 或 seg_copy_xxx 或 seg_expand_xxx
     const parts = data.split('_');
     if (parts.length < 3) return;
     
-    const action = parts[1];  // mom, me, copy
+    const action = parts[1];  // mom, me, copy, expand
     const segmentId = parts.slice(2).join('_');
     
     // 获取缓存的内容
     const cached = segmentService.getSegment(segmentId);
     if (!cached) {
-      await this.bongbongBot.answerCallbackQuery(null, { 
-        text: '⏰ 内容已过期，请重新查询' 
-      });
+      try {
+        await this.bongbongBot.sendMessage(chatId, '⏰ 内容已过期，请重新查询');
+      } catch (e) {}
       return;
     }
     
     switch (action) {
       case 'mom':
-        // 保存到母亲笔记本
+        // 保存到母亲笔记本 + 智能分析
+        const momAnalysis = await smartMemoryService.smartSave(cached.content, {
+          userId: 'mother',
+          userName: '妈妈',
+          source: 'ai_output'
+        });
+        
         const momResult = await notebookService.saveToMotherNotebook(cached.content, {
           source: 'ai_output',
-          category: 'ai_knowledge'
+          category: momAnalysis.analysis?.category || 'ai_knowledge',
+          tags: momAnalysis.analysis?.tags || []
         });
+        
         if (momResult.success) {
-          await this.bongbongBot.sendMessage(chatId, '✅ 已保存到 **妈妈的笔记本**', { parse_mode: 'Markdown' });
+          const tags = momAnalysis.analysis?.tags?.join(', ') || '';
+          await this.bongbongBot.sendMessage(chatId, 
+            `✅ 已保存到 **妈妈的笔记本**\n📂 分类: ${momAnalysis.analysis?.category || '知识'}\n🏷️ 标签: ${tags || '无'}`, 
+            { parse_mode: 'Markdown' }
+          );
         }
         break;
         
       case 'me':
-        // 保存到我的笔记本
+        // 保存到我的笔记本 + 智能分析
+        const meAnalysis = await smartMemoryService.smartSave(cached.content, {
+          userId,
+          userName: '我',
+          source: 'ai_output'
+        });
+        
         const meResult = await notebookService.saveToMyNotebook(userId, cached.content, {
           source: 'ai_output',
-          category: 'ai_knowledge'
+          category: meAnalysis.analysis?.category || 'ai_knowledge',
+          tags: meAnalysis.analysis?.tags || []
         });
+        
         if (meResult.success) {
-          await this.bongbongBot.sendMessage(chatId, '✅ 已保存到 **我的笔记本**', { parse_mode: 'Markdown' });
+          const tags = meAnalysis.analysis?.tags?.join(', ') || '';
+          await this.bongbongBot.sendMessage(chatId, 
+            `✅ 已保存到 **我的笔记本**\n📂 分类: ${meAnalysis.analysis?.category || '知识'}\n🏷️ 标签: ${tags || '无'}`, 
+            { parse_mode: 'Markdown' }
+          );
         }
         break;
         
       case 'copy':
-        // 提示复制（Telegram 不支持直接复制）
-        await this.bongbongBot.sendMessage(chatId, '📋 **复制提示**\n\n长按上方消息可复制内容', { parse_mode: 'Markdown' });
+        // 发送纯文本方便复制
+        await this.bongbongBot.sendMessage(chatId, 
+          `📋 **复制内容**\n\n\`\`\`\n${cached.content.substring(0, 3000)}\n\`\`\`\n\n_长按上方代码块可复制_`, 
+          { parse_mode: 'Markdown' }
+        );
         break;
+        
+      case 'expand':
+        // 扩展搜索 - 触发智能记忆并搜索相关内容
+        await this.handleExpandSearch(chatId, userId, cached.content);
+        break;
+    }
+  }
+
+  /**
+   * 扩展搜索 - 智能分析并记忆
+   */
+  async handleExpandSearch(chatId, userId, content) {
+    try {
+      await this.bongbongBot.sendChatAction(chatId, 'typing');
+      
+      // 提取关键词进行搜索
+      const keywords = content.substring(0, 100).replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ').trim();
+      
+      // 扩展搜索并自动记忆
+      const searchResult = await smartMemoryService.expandSearch(keywords, {
+        userId,
+        autoMemorize: true
+      });
+      
+      // 构建响应
+      let response = `🔍 **扩展搜索结果**\n\n`;
+      response += `📝 关键词: ${keywords.substring(0, 30)}...\n\n`;
+      
+      if (searchResult.results.length > 0) {
+        response += `**找到 ${searchResult.results.length} 条相关记忆:**\n`;
+        searchResult.results.slice(0, 5).forEach((r, i) => {
+          response += `${i + 1}. ${r.summary || r.content?.substring(0, 50)}...\n`;
+        });
+      } else {
+        response += `_暂无相关记忆_\n`;
+      }
+      
+      if (searchResult.recommendations.length > 0) {
+        response += `\n**💡 相关推荐:**\n`;
+        searchResult.recommendations.forEach((r, i) => {
+          response += `• ${r}\n`;
+        });
+      }
+      
+      response += `\n✅ 已自动记忆本次内容`;
+      
+      await this.bongbongBot.sendMessage(chatId, response, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '📊 查看统计', callback_data: 'memory_stats' },
+            { text: '🏠 返回菜单', callback_data: 'menu_main' }
+          ]]
+        }
+      });
+    } catch (error) {
+      logger.error('ExpandSearch error:', error);
+      await this.bongbongBot.sendMessage(chatId, '❌ 扩展搜索失败');
     }
   }
 
