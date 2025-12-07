@@ -180,12 +180,20 @@ class BongBongService {
     let historyContext = '';
     if (history.length > 0) {
       const recentHistory = history.slice(-6); // 最近6條
-      historyContext = '\n\n[最近對話]\n' + recentHistory
-        .map(h => `${h.role === 'user' ? '用戶' : 'BongBong'}: ${h.content}`)
+      historyContext = '\n\n[最近对话]\n' + recentHistory
+        .map(h => `${h.role === 'user' ? '用户' : 'BongBong'}: ${h.content}`)
         .join('\n');
     }
 
-    return `${systemPrompt}${memoryContext}${historyContext}\n\n用戶: ${message}\n\nBongBong:`;
+    // 强制简体中文 + Markdown 格式输出
+    const formatInstruction = `
+
+## 输出要求
+1. **语言**: 必须使用简体中文回复
+2. **格式**: 使用 Markdown 格式（标题、列表、粗体等）
+3. **简洁**: 回答简洁有力，不啰嗦`;
+
+    return `${systemPrompt}${formatInstruction}${memoryContext}${historyContext}\n\n用户: ${message}\n\nBongBong:`;
   }
 
   /**

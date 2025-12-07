@@ -23,8 +23,10 @@ import menuService, { MAIN_MENU } from './menuService.js';
 import newsService from './newsService.js';
 import imageService from './imageService.js';
 import visionService from './visionService.js';
+import visaService, { VISA_KEYWORDS } from './visaService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
+import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
 import logger from '../utils/logger.js';
 
 class DualBotService {
@@ -77,6 +79,7 @@ class DualBotService {
       await newsService.init();
       await imageService.init();
       visionService.init();
+      await visaService.init();  // 签证咨询服务
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -192,6 +195,12 @@ class DualBotService {
       }
       if (isDrawRequest(text)) {
         await this.handleDraw(msg, [null, extractDrawPrompt(text)]);
+        return;
+      }
+
+      // 🛂 签证咨询检测（母亲专用功能）
+      if (visaService.isVisaQuery(text)) {
+        await this.handleVisaQuery(chatId, userId, userName, text);
         return;
       }
 
@@ -843,7 +852,14 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
     // ===== 遊戲 =====
     if (data.startsWith('game_')) {
       const game = data.replace('game_', '');
-      await this.bongbongBot.sendMessage(chatId, `🎮 *${game} 遊戲*\n\n(功能開發中...)`, { parse_mode: 'Markdown' });
+      await this.bongbongBot.sendMessage(chatId, `🎮 **${game} 游戏**\n\n(功能开发中...)`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // ===== 🛂 签证咨询 =====
+    if (data.startsWith('visa_')) {
+      const action = data.replace('visa_', '');
+      await this.handleVisaCallback(chatId, userId, userName, action, messageId);
       return;
     }
 
@@ -911,6 +927,114 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 🛂 处理签证咨询（母亲专用）
+   */
+  async handleVisaQuery(chatId, userId, userName, question) {
+    try {
+      // 发送处理中提示
+      const processingMsg = await this.bongbongBot.sendMessage(
+        chatId, 
+        '🛂 **签证咨询模式启动**\n\n正在深度分析您的问题，请稍候...\n\n_使用 Gemini 2.5 Pro 深度思考中..._',
+        { parse_mode: 'Markdown' }
+      );
+
+      // 调用签证服务
+      const result = await visaService.handleVisaQuery(question, userName);
+      
+      // 格式化输出（简体中文 + Markdown）
+      let response = formatAIOutput(result.response);
+      
+      // 添加扩展问题
+      if (result.expandedQuestions && result.expandedQuestions.length > 0) {
+        response = formatVisaResponse(response, result.expandedQuestions);
+      }
+      
+      // 添加仪表盘
+      const dashboard = formatDashboard({
+        messageCount: 0,
+        model: result.model,
+        tokens: 0,
+        timestamp: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      });
+      
+      response += dashboard;
+
+      // 删除处理中消息
+      try {
+        await this.bongbongBot.deleteMessage(chatId, processingMsg.message_id);
+      } catch (e) {
+        // 忽略删除失败
+      }
+
+      // 发送结果（分段发送长消息）
+      const chunks = this.splitMessage(response, 4000);
+      for (const chunk of chunks) {
+        await this.bongbongBot.sendMessage(chatId, chunk, { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '📋 更多签证问题', callback_data: 'visa_more' },
+                { text: '🏠 返回菜单', callback_data: 'menu_main' }
+              ]
+            ]
+          }
+        });
+      }
+
+      // 记录到群记忆
+      await groupMemoryService.logGroupMessage({
+        groupId: chatId.toString(),
+        userId: 'bongbong',
+        userName: 'BongBong',
+        content: `[签证咨询] ${question.substring(0, 50)}...`,
+        isBot: true,
+        botName: 'qitiandashengqianqian_bot'
+      });
+
+      logger.info(`Visa query handled for ${userName}: ${question.substring(0, 50)}...`);
+    } catch (error) {
+      logger.error('Visa query error:', error);
+      await this.bongbongBot.sendMessage(
+        chatId,
+        '❌ **签证咨询出错**\n\n请稍后重试，或直接描述您的签证问题。',
+        { parse_mode: 'Markdown' }
+      );
+    }
+  }
+
+  /**
+   * 🛂 处理签证菜单回调
+   */
+  async handleVisaCallback(chatId, userId, userName, action, messageId) {
+    const visaQuestions = {
+      free: '中国公民去泰国免签政策是什么？可以停留多久？需要什么材料？',
+      arrival: '泰国落地签怎么办理？需要什么材料？费用多少？',
+      retirement: '泰国养老签证怎么申请？需要什么条件？存款要求是多少？',
+      elite: '泰国精英签证是什么？费用多少？有什么优势？',
+      latest: '泰国最新的签证政策有哪些变化？2024年有什么新规定？',
+      more: '请问还有什么签证相关的问题我可以帮您解答？',
+      ask: null  // 自由提问模式
+    };
+
+    if (action === 'ask') {
+      // 设置待处理操作
+      this.pendingAction.set(userId, { type: 'visa_ask', chatId });
+      await this.bongbongBot.sendMessage(
+        chatId,
+        '🛂 **自由提问模式**\n\n请直接输入您的签证问题，我会为您详细解答。\n\n例如：\n- 我想在泰国长期居住，有什么签证选择？\n- 养老签证和精英签证哪个更适合我？\n- 签证快到期了怎么续签？',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    const question = visaQuestions[action];
+    if (question) {
+      await this.handleVisaQuery(chatId, userId, userName, question);
+    }
   }
 
   /**
@@ -987,14 +1111,20 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
       case 'note_search':
         const results = await memoryService.searchNotes(userId, text);
         if (results.length === 0) {
-          await this.bongbongBot.sendMessage(chatId, `🔍 *搜索結果*\n\n沒有找到包含「${text}」的便簽`, { parse_mode: 'Markdown' });
+          await this.bongbongBot.sendMessage(chatId, `🔍 **搜索结果**\n\n没有找到包含「${text}」的便签`, { parse_mode: 'Markdown' });
         } else {
-          let resultText = `🔍 *搜索結果* (${results.length})\n\n`;
+          let resultText = `🔍 **搜索结果** (${results.length})\n\n`;
           results.forEach((note, i) => {
-            resultText += `${i + 1}. *${note.title}*\n   ${note.content.substring(0, 50)}...\n\n`;
+            resultText += `${i + 1}. **${note.title}**\n   ${note.content.substring(0, 50)}...\n\n`;
           });
           await this.bongbongBot.sendMessage(chatId, resultText, { parse_mode: 'Markdown' });
         }
+        return true;
+        
+      case 'visa_ask':
+        // 签证自由提问
+        const userName = '用户';  // 从 context 获取
+        await this.handleVisaQuery(chatId, userId, userName, text);
         return true;
     }
     

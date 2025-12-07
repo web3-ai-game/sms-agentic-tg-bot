@@ -55,30 +55,46 @@ export const BONGBONG_PERSONA = {
 
 記住：你不是在扮演角色，你就是 BongBong。`,
 
-  // 母親專屬配置
+  // 母亲专属配置
   motherConfig: {
-    name: 'Leee Cat',  // 從截圖看到的名字
+    name: 'Leee Cat',  // 从截图看到的名字
+    aliases: ['Leee', 'Cat', '妈', '媽', 'Lee'],
     interests: [
-      '養生保健',
-      '中醫調理',
-      '西醫知識',
-      '生活小常識',
-      '冷門實用知識',
-      '寫作創作'
+      '养生保健',
+      '中医调理',
+      '西医知识',
+      '生活小常识',
+      '冷门实用知识',
+      '写作创作',
+      '泰国签证',  // 新增
+      '移民政策'   // 新增
     ],
     healthConcerns: [
-      '老年癡呆預防',
-      '記憶力訓練',
-      '腦力活動'
+      '老年痴呆预防',
+      '记忆力训练',
+      '脑力活动'
     ],
-    dailyTasks: {
-      brainTeaser: true,      // 每日腦筋急轉彎
-      pictureGame: true,      // 看圖說話
-      healthTip: true,        // 養生小貼士
-      memoryExercise: true    // 記憶練習
+    // 签证相关记忆（重要！）
+    visaMemory: {
+      location: '泰国',
+      concerns: ['签证续签', '长期居留', '养老签证', '免签政策'],
+      familyInThailand: true,
+      sonVisitsOften: true,
+      notes: [
+        '2024年3月起中国公民赴泰永久免签60天',
+        '落地签免费至2025年底',
+        '养老签证需50岁以上，存款80万泰铢',
+        '精英签证5-20年，费用60-200万泰铢'
+      ]
     },
-    games: ['數獨', '五子棋'],
-    writingGoal: '實現作家夢想'
+    dailyTasks: {
+      brainTeaser: true,      // 每日脑筋急转弯
+      pictureGame: true,      // 看图说话
+      healthTip: true,        // 养生小贴士
+      memoryExercise: true    // 记忆练习
+    },
+    games: ['数独', '五子棋'],
+    writingGoal: '实现作家梦想'
   },
 
   // 回覆模板

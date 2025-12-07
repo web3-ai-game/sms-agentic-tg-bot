@@ -367,86 +367,98 @@ class AvatarService {
         }
       });
 
+      // 输出格式要求
+      const formatRule = `
+
+## 输出要求
+- **语言**: 必须使用简体中文
+- **格式**: 自然对话，不需要 Markdown`;
+
       let prompt;
       switch (mode) {
         case 'toHuman':
           // 回覆真人消息
-          const isMother = userName.includes('Leee') || userName.includes('Cat') || userName.includes('媽');
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}${historyContext}
+          const isMother = userName.includes('Leee') || userName.includes('Cat') || userName.includes('媽') || userName.includes('妈');
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}${historyContext}
 
-${userName} 剛說：「${context}」
+${userName} 刚说：「${context}」
 
-請用周文的風格回覆，要求：
-1. ${isMother ? '對母親要溫暖關心，耐心回答' : '像朋友聊天，輕鬆自然'}
-2. 可以分享有趣的知識或觀點
-3. 適度幽默，但不刻意
-4. 自然對話，不用每句都拋梗
+请用周文的风格回复，要求：
+1. ${isMother ? '对母亲要温暖关心，耐心回答' : '像朋友聊天，轻松自然'}
+2. 可以分享有趣的知识或观点
+3. 适度幽默，但不刻意
+4. 自然对话，不用每句都抛梗
+5. 必须使用简体中文
 
-直接輸出回覆，不要加任何前綴：`;
+直接输出回复，不要加任何前缀：`;
           break;
 
         case 'afterBongBong':
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}${historyContext}
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}${historyContext}
 
-BongBong 剛說：「${context}」
+BongBong 刚说：「${context}」
 
-請用周文的風格接話，要求：
-1. 可以補充或發表不同看法
-2. 輕鬆友好的互動
-3. 自然對話
+请用周文的风格接话，要求：
+1. 可以补充或发表不同看法
+2. 轻松友好的互动
+3. 自然对话
+4. 必须使用简体中文
 
-直接輸出回覆，不要加任何前綴：`;
+直接输出回复，不要加任何前缀：`;
           break;
 
         case 'idle':
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}${historyContext}
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}${historyContext}
 
-群裡好久沒人說話了，請用周文的風格開啟一個話題：
-1. 可以是隨便聊聊
-2. 可以問問大家在幹嘛
-3. 可以分享一個想法
-4. 簡短，1-2句話
+群里好久没人说话了，请用周文的风格开启一个话题：
+1. 可以是随便聊聊
+2. 可以问问大家在干嘛
+3. 可以分享一个想法
+4. 简短，1-2句话
+5. 必须使用简体中文
 
-直接輸出，不要加任何前綴：`;
+直接输出，不要加任何前缀：`;
           break;
 
         case 'praise':
           const story = ZHOUWEN_STORIES[Math.floor(Math.random() * ZHOUWEN_STORIES.length)];
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}
 
-請用周文的風格，變相吹捧一下自己（周文老師），話題是：${story.topic}
-參考內容：${story.content}
+请用周文的风格，变相吹捧一下自己（周文老师），话题是：${story.topic}
+参考内容：${story.content}
 
 要求：
-1. 不要太明顯，要自然
-2. 可以用「當年」「以前」開頭
-3. 適可而止，不要太長
-4. 2-3句話
+1. 不要太明显，要自然
+2. 可以用「当年」「以前」开头
+3. 适可而止，不要太长
+4. 2-3句话
+5. 必须使用简体中文
 
-直接輸出，不要加任何前綴：`;
+直接输出，不要加任何前缀：`;
           break;
 
         case 'expandTopic':
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}${historyContext}
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}${historyContext}
 
-請根據群聊記錄，用周文的風格深入探討或擴展一個話題：
-原話題：「${context}」
+请根据群聊记录，用周文的风格深入探讨或扩展一个话题：
+原话题：「${context}」
 
 要求：
-1. 可以發表自己的看法
-2. 可以提出問題
-3. 保持簡短，2-3句話
-4. 貼吧老哥風格
+1. 可以发表自己的看法
+2. 可以提出问题
+3. 保持简短，2-3句话
+4. 轻松自然风格
+5. 必须使用简体中文
 
-直接輸出，不要加任何前綴：`;
+直接输出，不要加任何前缀：`;
           break;
 
         default:
-          prompt = `${AVATAR_PERSONA.systemPrompt}${styleContext}
+          prompt = `${AVATAR_PERSONA.systemPrompt}${formatRule}${styleContext}
 
-用戶說：「${context}」
+用户说：「${context}」
 
-請用周文的風格回覆，簡短有力：`;
+请用周文的风格回复，简短有力，必须使用简体中文：`;
       }
 
       const result = await model.generateContent(prompt);

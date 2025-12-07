@@ -5,26 +5,26 @@
  */
 
 export const MAIN_MENU = {
-  text: `🎭 *BongBong 主菜單*
+  text: `🎭 **BongBong 主菜单**
 
-選擇你想要的功能：`,
+选择你想要的功能：`,
   
   keyboard: [
     [
-      { text: '💬 聊天對話', callback_data: 'menu_chat' },
-      { text: '📝 記事本', callback_data: 'menu_notes' }
+      { text: '💬 聊天对话', callback_data: 'menu_chat' },
+      { text: '📝 记事本', callback_data: 'menu_notes' }
     ],
     [
-      { text: '🎨 創作工具', callback_data: 'menu_creative' },
-      { text: '🧠 腦力訓練', callback_data: 'menu_brain' }
+      { text: '🛂 签证咨询', callback_data: 'menu_visa' },
+      { text: '🌿 养生专区', callback_data: 'menu_health' }
     ],
     [
-      { text: '🌿 養生專區', callback_data: 'menu_health' },
-      { text: '🎮 休閒遊戲', callback_data: 'menu_games' }
+      { text: '🎨 创作工具', callback_data: 'menu_creative' },
+      { text: '🧠 脑力训练', callback_data: 'menu_brain' }
     ],
     [
-      { text: '⚙️ 設置', callback_data: 'menu_settings' },
-      { text: '📊 統計', callback_data: 'menu_stats' }
+      { text: '🎮 休闲游戏', callback_data: 'menu_games' },
+      { text: '⚙️ 设置', callback_data: 'menu_settings' }
     ]
   ]
 };
@@ -87,25 +87,46 @@ export const FULLPOWER_MODE = {
 };
 
 export const NOTES_MENU = {
-  text: `📝 *記事本*
+  text: `📝 **记事本**
 
-管理你的筆記和便簽：`,
+管理你的笔记和便签：`,
   
   keyboard: [
     [
-      { text: '➕ 新建便簽', callback_data: 'notes_new' },
+      { text: '➕ 新建便签', callback_data: 'notes_new' },
       { text: '📋 查看全部', callback_data: 'notes_list' }
     ],
     [
-      { text: '🔍 搜索筆記', callback_data: 'notes_search' },
-      { text: '⭐ 重要筆記', callback_data: 'notes_important' }
+      { text: '🔍 搜索笔记', callback_data: 'notes_search' },
+      { text: '💾 保存对话', callback_data: 'notes_save_chat' }
     ],
     [
-      { text: '💾 保存對話', callback_data: 'notes_save_chat' },
-      { text: '📤 導出筆記', callback_data: 'notes_export' }
+      { text: '◀️ 返回主菜单', callback_data: 'menu_main' }
+    ]
+  ]
+};
+
+// 🛂 签证咨询菜单（母亲专用）
+export const VISA_MENU = {
+  text: `🛂 **签证咨询**
+
+泰国签证政策专家，为您解答：`,
+  
+  keyboard: [
+    [
+      { text: '🆓 免签政策', callback_data: 'visa_free' },
+      { text: '📋 落地签', callback_data: 'visa_arrival' }
     ],
     [
-      { text: '◀️ 返回主菜單', callback_data: 'menu_main' }
+      { text: '👴 养老签证', callback_data: 'visa_retirement' },
+      { text: '💎 精英签证', callback_data: 'visa_elite' }
+    ],
+    [
+      { text: '📅 最新政策', callback_data: 'visa_latest' },
+      { text: '❓ 自由提问', callback_data: 'visa_ask' }
+    ],
+    [
+      { text: '◀️ 返回主菜单', callback_data: 'menu_main' }
     ]
   ]
 };
@@ -312,6 +333,7 @@ class MenuService {
       main: MAIN_MENU,
       chat: CHAT_MENU,
       notes: NOTES_MENU,
+      visa: VISA_MENU,  // 签证咨询
       creative: CREATIVE_MENU,
       image: IMAGE_MENU,
       video: VIDEO_MENU,
