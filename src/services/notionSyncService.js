@@ -55,28 +55,22 @@ class NotionSyncService {
   }
 
   /**
-   * Find existing database or create new one
+   * Verify database exists
    */
   async findOrCreateDatabase() {
     try {
-      // Search for existing database
-      const response = await this.notion.search({
-        query: 'TG Chat Records',
-        filter: { property: 'object', value: 'database' }
-      });
-
-      if (response.results.length > 0) {
-        this.databaseId = response.results[0].id;
-        logger.info(`NotionSync: Found existing database: ${this.databaseId}`);
+      // Database ID is pre-configured, just verify it exists
+      if (this.databaseId) {
+        const db = await this.notion.databases.retrieve({ database_id: this.databaseId });
+        logger.info(`NotionSync: Database verified: ${db.title?.[0]?.plain_text || this.databaseId}`);
         return;
       }
 
-      // Database not found - need to create manually or via parent page
-      logger.warn('NotionSync: Database not found. Please create "TG Chat Records" database in Notion.');
-      logger.warn('NotionSync: Required properties: speaker, user_id, content, vector, action, semantic, timestamp');
+      logger.warn('NotionSync: No database ID configured');
       
     } catch (error) {
-      logger.error('NotionSync: Database search failed:', error.message);
+      logger.error('NotionSync: Database verification failed:', error.message);
+      this.databaseId = null; // Disable sync if database not found
     }
   }
 
