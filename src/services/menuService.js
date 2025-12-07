@@ -7,25 +7,67 @@
 // 功能状态标记
 // ✅ = 已完成  🔨 = 开发中  📋 = 计划中
 
+// BongBong 主菜單 (聊天/筆記/養生/新聞/創作)
 export const MAIN_MENU = {
   text: `🎭 **BongBong 主菜单**
 
-选择功能 (✅已完成 🔨开发中)：`,
+我是你的靠谱助手，选择功能：`,
   
   keyboard: [
     [
       { text: '💬 聊天', callback_data: 'menu_chat' },
-      { text: '📝 笔记 ✅', callback_data: 'menu_notes' },
-      { text: '🛂 签证 ✅', callback_data: 'menu_visa' }
+      { text: '📝 笔记', callback_data: 'menu_notes' }
     ],
     [
-      { text: '🌿 养生 🔨', callback_data: 'menu_health' },
-      { text: '🧠 脑力 🔨', callback_data: 'menu_brain' },
-      { text: '🎨 创作 ✅', callback_data: 'menu_creative' }
+      { text: '🌿 养生', callback_data: 'menu_health' },
+      { text: '📰 新闻', callback_data: 'menu_news' }
     ],
     [
-      { text: '🎮 游戏 📋', callback_data: 'menu_games' },
+      { text: '🎨 创作', callback_data: 'menu_creative' },
       { text: '⚙️ 设置', callback_data: 'menu_settings' }
+    ]
+  ]
+};
+
+// Admin Bot 主菜單 (簽證/腦力/遊戲/生成)
+export const ADMIN_MENU = {
+  text: `🤖 **Admin Bot 菜单**
+
+我负责签证、游戏和生成任务：`,
+  
+  keyboard: [
+    [
+      { text: '🛂 签证', callback_data: 'admin_visa' },
+      { text: '🧠 脑力', callback_data: 'admin_brain' }
+    ],
+    [
+      { text: '🎮 游戏', callback_data: 'admin_games' },
+      { text: '🔮 真实之眼', callback_data: 'admin_eye' }
+    ],
+    [
+      { text: '🖼️ 图片', callback_data: 'admin_image' },
+      { text: '🎬 视频', callback_data: 'admin_video' }
+    ]
+  ]
+};
+
+// 新聞菜單
+export const NEWS_MENU = {
+  text: `📰 **新闻中心**
+
+Gemini + Grok 双引擎新闻对比：`,
+  
+  keyboard: [
+    [
+      { text: '📰 今日新闻', callback_data: 'news_today' },
+      { text: '🗣️ 舆论风向', callback_data: 'news_opinion' }
+    ],
+    [
+      { text: '⚖️ 新闻+舆论对比', callback_data: 'news_compare' }
+    ],
+    [
+      { text: '🔄 刷新', callback_data: 'news_refresh' },
+      { text: '◀️ 返回', callback_data: 'menu_main' }
     ]
   ]
 };
@@ -332,18 +374,22 @@ export const CONFIRM_DIALOG = (action) => ({
 class MenuService {
   constructor() {
     this.menus = {
+      // BongBong 菜單
       main: MAIN_MENU,
       chat: CHAT_MENU,
       notes: NOTES_MENU,
-      visa: VISA_MENU,  // 签证咨询
+      news: NEWS_MENU,
       creative: CREATIVE_MENU,
-      image: IMAGE_MENU,
-      video: VIDEO_MENU,
-      brain: BRAIN_MENU,
       health: HEALTH_MENU,
-      games: GAMES_MENU,
       settings: SETTINGS_MENU,
-      memory: MEMORY_MENU
+      memory: MEMORY_MENU,
+      // Admin Bot 菜單
+      admin: ADMIN_MENU,
+      visa: VISA_MENU,
+      brain: BRAIN_MENU,
+      games: GAMES_MENU,
+      image: IMAGE_MENU,
+      video: VIDEO_MENU
     };
   }
 

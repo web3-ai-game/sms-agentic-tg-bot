@@ -29,6 +29,8 @@ import notebookService from './notebookService.js';
 import smartMemoryService from './smartMemoryService.js';
 import notionSyncService from './notionSyncService.js';
 import creativeService from './creativeService.js';
+import idleAnalysisService from './idleAnalysisService.js';
+import newsCompareService from './newsCompareService.js';
 import { handleVoiceMessage } from '../handlers/voiceHandlerV2.js';
 import { detectKeyword, isDrawRequest, isNewsRequest, extractDrawPrompt } from '../utils/keywords.js';
 import { formatAIOutput, formatDashboard, formatVisaResponse } from '../utils/formatter.js';
@@ -89,6 +91,8 @@ class DualBotService {
       await smartMemoryService.init();  // 智能记忆系统
       await notionSyncService.initialize();  // Notion 同步服务
       await creativeService.init();  // 创作服务
+      await idleAnalysisService.init();  // 闲置分析服务
+      await newsCompareService.init();  // 新闻对比服务
 
       // 註冊處理器
       this.registerBongBongHandlers();
@@ -189,6 +193,9 @@ class DualBotService {
           isBot: false
         });
         
+        // 記錄群組活動 (閒置分析用)
+        idleAnalysisService.recordActivity(chatId);
+        
         // 同步到 Notion (用户消息全量复制)
         notionSyncService.addMessage({
           isBot: false,
@@ -199,28 +206,8 @@ class DualBotService {
         }).catch(err => logger.debug('Notion sync error:', err.message));
       }
 
-      // 檢測關鍵詞
-      const keyword = detectKeyword(text);
-      if (keyword) {
-        await this.handleKeywordAction(chatId, userId, keyword, text);
-        return;
-      }
-
-      // 檢測新聞/畫畫請求
-      if (isNewsRequest(text)) {
-        await this.handleNews(msg);
-        return;
-      }
-      if (isDrawRequest(text)) {
-        await this.handleDraw(msg, [null, extractDrawPrompt(text)]);
-        return;
-      }
-
-      // 🛂 签证咨询检测（母亲专用功能）
-      if (visaService.isVisaQuery(text)) {
-        await this.handleVisaQuery(chatId, userId, userName, text);
-        return;
-      }
+      // 注意: 已移除關鍵詞觸發，所有功能通過菜單按鈕觸發
+      // 保留 /menu 命令作為入口
 
       // 發送輸入狀態
       await this.bongbongBot.sendChatAction(chatId, 'typing');
@@ -823,6 +810,13 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
     if (data.startsWith('creative_')) {
       const action = data.replace('creative_', '');
       await this.handleCreativeCallback(chatId, userId, userName, action, messageId);
+      return;
+    }
+
+    // ===== 新聞中心 =====
+    if (data.startsWith('news_')) {
+      const action = data.replace('news_', '');
+      await this.handleNewsCallback(chatId, userId, action, messageId);
       return;
     }
 
@@ -1656,6 +1650,68 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
     return chunks;
   }
 
+  // ==================== 新聞功能 ====================
+
+  /**
+   * 處理新聞回調
+   */
+  async handleNewsCallback(chatId, userId, action, messageId) {
+    try {
+      switch (action) {
+        case 'today':
+          // 今日新聞
+          await this.bongbongBot.sendMessage(chatId, '📰 *正在獲取今日新聞...*', { parse_mode: 'Markdown' });
+          const segments = await newsCompareService.getReportSegments();
+          for (let i = 0; i < Math.min(segments.length, 3); i++) {
+            await this.bongbongBot.sendMessage(chatId, segments[i], { parse_mode: 'Markdown' });
+          }
+          break;
+
+        case 'opinion':
+          // 輿論風向
+          await this.bongbongBot.sendMessage(chatId, '🗣️ *正在分析輿論風向...*', { parse_mode: 'Markdown' });
+          const opinion = await newsCompareService.fetchOpinion();
+          const opinionChunks = this.splitContent(opinion, 3500);
+          for (const chunk of opinionChunks) {
+            await this.bongbongBot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+          }
+          break;
+
+        case 'compare':
+          // 新聞 + 輿論對比
+          await this.bongbongBot.sendMessage(chatId, '⚖️ *正在生成對比報告...*\n\n這可能需要一點時間...', { parse_mode: 'Markdown' });
+          const report = await newsCompareService.getReportSegments(true);
+          for (const segment of report) {
+            await this.bongbongBot.sendMessage(chatId, segment, { parse_mode: 'Markdown' });
+          }
+          await this.bongbongBot.sendMessage(chatId, '✅ 報告生成完成！', {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '🔄 刷新', callback_data: 'news_refresh' },
+                { text: '◀️ 返回', callback_data: 'menu_main' }
+              ]]
+            }
+          });
+          break;
+
+        case 'refresh':
+          // 強制刷新
+          await this.bongbongBot.sendMessage(chatId, '🔄 *正在刷新新聞...*', { parse_mode: 'Markdown' });
+          const refreshed = await newsCompareService.getReportSegments(true);
+          for (const segment of refreshed) {
+            await this.bongbongBot.sendMessage(chatId, segment, { parse_mode: 'Markdown' });
+          }
+          break;
+
+        default:
+          await menuService.updateMenu(this.bongbongBot, chatId, messageId, 'news');
+      }
+    } catch (error) {
+      logger.error('News callback error:', error);
+      await this.bongbongBot.sendMessage(chatId, `❌ 新聞獲取失敗: ${error.message}`);
+    }
+  }
+
   /**
    * 停止
    */
@@ -1664,6 +1720,7 @@ ${isGroup ? '在群裡，我會和周文的虛擬分身一起陪你聊天！' : 
       this.bongbongBot.stopPolling();
     }
     avatarService.stop();
+    idleAnalysisService.stop();
     
     for (const timer of this.idleTimers.values()) {
       clearTimeout(timer);
