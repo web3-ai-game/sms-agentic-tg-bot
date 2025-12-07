@@ -1,10 +1,10 @@
 /**
- * 智能模型路由器 v2.0
+ * 智能模型路由器 v3.0
  * 
  * 改進:
  * - 基於語義分析而非簡單字數
  * - 排除昂貴模型
- * - 50% Gemini / 30% Grok / 20% 備用
+ * - 75% Gemini / 25% Grok (減少 Grok 調用)
  * - 向量記憶引用
  */
 
@@ -320,21 +320,19 @@ class SmartRouter {
   }
 
   /**
-   * 根據 50/30/20 比例選擇
+   * 根據 75/25 比例選擇 (減少 Grok 調用)
    */
   selectByRatio() {
     const { gemini, grok, total } = this.usageCounter;
     
     if (total === 0) return 'gemini.flash';
     
-    const geminiRatio = gemini / total;
     const grokRatio = grok / total;
     
-    // 目標: Gemini 50%, Grok 30%
-    if (geminiRatio < 0.5) {
-      return 'gemini.flash';
-    } else if (grokRatio < 0.3) {
-      return 'grok.fast';
+    // 目標: Gemini 75%, Grok 25%
+    if (grokRatio < 0.25) {
+      // 只有 25% 機會用 Grok
+      return Math.random() < 0.25 ? 'grok.mini' : 'gemini.flash';
     } else {
       return 'gemini.flash'; // 默認 Gemini
     }

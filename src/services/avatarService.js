@@ -204,6 +204,7 @@ class AvatarService {
    */
   async respondToHuman(chatId, humanMessage, messageId, userName) {
     try {
+      const isMother = userName.includes('Leee') || userName.includes('Cat') || userName.includes('媽');
       const response = await this.generateAvatarResponse(chatId, humanMessage, 'toHuman', userName);
       
       if (response) {
@@ -220,6 +221,11 @@ class AvatarService {
           }
         }
 
+        // 母親的消息 20% 機率發送圖片
+        if (isMother && Math.random() < 0.2) {
+          await this.sendImageReply(chatId, humanMessage, messageId);
+        }
+
         // 記錄到群記憶
         await groupMemoryService.logGroupMessage({
           groupId: chatId.toString(),
@@ -234,6 +240,45 @@ class AvatarService {
       }
     } catch (error) {
       logger.error('Error responding to human:', error);
+    }
+  }
+
+  /**
+   * 發送圖片回覆 (給母親的圖文並茂)
+   */
+  async sendImageReply(chatId, context, messageId) {
+    try {
+      // 使用 Gemini 生成圖片
+      const imageModel = this.gemini.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: { responseModalities: ['image', 'text'] }
+      });
+
+      const prompt = `根據以下話題生成一張溫馨、適合長輩看的圖片：
+話題：${context}
+要求：
+- 風格溫馨、明亮
+- 適合長輩觀看
+- 可以是風景、美食、花卉等`;
+
+      const result = await imageModel.generateContent(prompt);
+      const response = result.response;
+      
+      // 檢查是否有圖片
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+          await this.bot.sendPhoto(chatId, imageBuffer, {
+            caption: '🖼️ 給媽看的圖',
+            reply_to_message_id: messageId
+          });
+          logger.info('Sent image reply to mother');
+          return;
+        }
+      }
+    } catch (error) {
+      logger.error('Error sending image reply:', error.message);
+      // 圖片生成失敗不影響主流程
     }
   }
 
@@ -318,12 +363,11 @@ class AvatarService {
 
 ${userName} 剛說：「${context}」
 
-請用周文的風格回覆，你是主力噴子，無限火力模式！要求：
-1. ${isMother ? '對母親要表面嫌棄但實際關心，可以多說幾句' : '貼吧老哥風格，可以長篇大論吐槽'}
-2. 可以接話、吐槽、抬槓、發表看法
-3. 口頭禪：「得了吧」「行吧」「就這？」「6」「絕了」「好家伙」「笑死」
-4. 不用控制長度，想說多少說多少，但要有趣
-5. 可以隨機拋梗、扯淡、無厘頭聯想
+請用周文的風格回覆，要求：
+1. ${isMother ? '對母親要溫暖關心，耐心回答' : '像朋友聊天，輕鬆自然'}
+2. 可以分享有趣的知識或觀點
+3. 適度幽默，但不刻意
+4. 自然對話，不用每句都拋梗
 
 直接輸出回覆，不要加任何前綴：`;
           break;
@@ -333,10 +377,10 @@ ${userName} 剛說：「${context}」
 
 BongBong 剛說：「${context}」
 
-請用周文的風格接話，你是主力噴子！要求：
-1. 可以吐槽 BongBong 太正經
-2. 保持貼吧老哥風格，可以長篇大論
-3. 不用控制長度，想噴多少噴多少
+請用周文的風格接話，要求：
+1. 可以補充或發表不同看法
+2. 輕鬆友好的互動
+3. 自然對話
 
 直接輸出回覆，不要加任何前綴：`;
           break;

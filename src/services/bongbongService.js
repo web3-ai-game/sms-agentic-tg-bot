@@ -278,20 +278,14 @@ class BongBongService {
   }
 
   /**
-   * 構建儀表盤
+   * 構建儀表盤 (精簡版)
    */
   buildDashboard(data) {
-    const { messageCount, model, reason, tokens, memoryRefs } = data;
+    const { messageCount, model, reason, tokens } = data;
     const timestamp = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     
-    return `
-━━━━━━━━━━━━━━━━━━━━
-📊 *BongBong 儀表盤*
-━━━━━━━━━━━━━━━━━━━━
-💬 對話 #${messageCount} | ⏰ ${timestamp}
-🤖 模型: ${model} | 原因: ${reason}
-📝 Token: ${tokens} | 💾 記憶: ${memoryRefs}
-━━━━━━━━━━━━━━━━━━━━`;
+    // 精簡單行儀表盤
+    return `\n───\n📊 #${messageCount} | ${model} | ${tokens}t | ${timestamp}`;
   }
 
   /**

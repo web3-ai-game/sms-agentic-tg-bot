@@ -211,17 +211,18 @@ class DualBotService {
         history
       });
 
-      // 構建回覆
-      const responseText = `${result.icon} ${result.response}\n\n${result.dashboard}`;
+      // 構建回覆 (精簡儀表盤)
+      const responseText = `${result.response}${result.dashboard}`;
 
-      // 發送回覆
+      // 發送回覆 (帶精簡菜單按鈕)
       const sentMessage = await this.bongbongBot.sendMessage(chatId, responseText, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
             [
-              { text: '💾 保存', callback_data: 'quick_save' },
-              { text: '🔄 重新生成', callback_data: 'quick_regenerate' }
+              { text: '📋', callback_data: 'menu_main' },
+              { text: '💾', callback_data: 'quick_save' },
+              { text: '🔄', callback_data: 'quick_regenerate' }
             ]
           ]
         }
