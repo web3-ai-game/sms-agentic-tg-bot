@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables - NEVER COMMIT
+.env
+.env.local
+.env.*.local
+.doppler.yaml
+API.md
+
+# Logs
+logs/
+*.log
+
+# Backups
+backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Build output
+dist/
+build/
+
+# Testing
+coverage/
+
+# Sensitive files
+*.pem
+*.key
+secrets/
+credentials/
+
+# User data
+data/
+*.db
+*.sqlite
+
+# PM2
+.pm2/
